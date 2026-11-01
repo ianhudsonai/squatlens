@@ -105,7 +105,7 @@ export default defineConfig([
     },
   },
   {
-    files: ['*.{js,mjs,ts}', 'scripts/**/*.{js,mjs}', 'eval/**/*.ts', 'e2e/**/*.ts'],
+    files: ['*.{js,mjs,ts}', 'scripts/**/*.{js,mjs}', 'eval/**/*.ts', 'e2e/**/*.{ts,mjs}'],
     languageOptions: { globals: globals.node },
   },
   {
