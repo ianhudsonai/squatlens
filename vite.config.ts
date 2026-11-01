@@ -8,7 +8,7 @@ export default defineConfig({
   base: '/squatlens/',
   plugins: [react()],
   test: {
-    include: ['src/**/*.test.ts', 'test/**/*.test.ts', 'eval/**/*.test.ts'],
+    include: ['src/**/*.test.{ts,tsx}', 'test/**/*.test.ts', 'eval/**/*.test.ts'],
     environment: 'node',
   },
 });
