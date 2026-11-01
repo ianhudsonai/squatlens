@@ -29,6 +29,7 @@
  *
  * `Rep.depthNorm` is the rep's bottom depth relative to the deepest counted rep (deepest = 1).
  */
+import { withDefaults } from './options';
 import { hipMid } from './calibration';
 import type { PxTrack } from './smoothing';
 import type { Calibration, Rep } from './types';
@@ -51,15 +52,6 @@ export const DEFAULTS = {
 };
 
 export type RepOptions = typeof DEFAULTS;
-
-/** Spread that ignores keys explicitly set to undefined. */
-function withDefaults<T extends object>(defaults: T, opts: Partial<T>): T {
-  const out = { ...defaults };
-  for (const [k, v] of Object.entries(opts)) {
-    if (v !== undefined) (out as Record<string, unknown>)[k] = v;
-  }
-  return out;
-}
 
 /**
  * Per-frame clip-level depthNorm (null where the hip midpoint is unusable), or null when the

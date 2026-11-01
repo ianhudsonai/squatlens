@@ -22,7 +22,8 @@
  */
 import { dist } from './geometry';
 import type { Px } from './geometry';
-import { hipMid, median, shoulderMid, withDefaults } from './calibration';
+import { hipMid, median, shoulderMid } from './calibration';
+import { withDefaults } from './options';
 import { L_HIP, L_SHOULDER, R_HIP, R_SHOULDER, SIDE_JOINTS } from './landmarks';
 import type { PxTrack } from './smoothing';
 import type { Calibration, Confidence, Lm, Side, View, ViewResult } from './types';

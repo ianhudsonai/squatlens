@@ -20,7 +20,8 @@ import { hipMid, shoulderMid } from '../calibration';
 import { SIDE_JOINTS } from '../landmarks';
 import type { PxTrack } from '../smoothing';
 import type { Calibration, Metric, Rep, Side, TrunkResult } from '../types';
-import { DEFAULTS as LATERAL_DEFAULTS, lateralConfidence, withDefaults } from './lateral';
+import { withDefaults } from '../options';
+import { DEFAULTS as LATERAL_DEFAULTS, lateralConfidence } from './lateral';
 import type { LateralOptions } from './lateral';
 
 export const DEFAULTS = {

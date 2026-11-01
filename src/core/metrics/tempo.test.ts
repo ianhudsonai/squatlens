@@ -182,5 +182,8 @@ describe('velocityLoss', () => {
       value: 0.25,
       confidence: 'medium',
     });
+    // A last rep with no net rise is not a measured speed, so no 100%+ "loss".
+    expect(velocityLoss([t(1), t(0)]).value).toBeNull();
+    expect(velocityLoss([t(1), t(-0.3)]).value).toBeNull();
   });
 });

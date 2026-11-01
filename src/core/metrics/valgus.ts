@@ -34,6 +34,7 @@
  * window is too short (`insufficient_frames`), or too few window frames have usable landmarks
  * (`low_visibility`).
  */
+import { withDefaults } from '../options';
 import { angleDeg, dist } from '../geometry';
 import type { Px } from '../geometry';
 import { SIDE_JOINTS } from '../landmarks';
@@ -170,10 +171,7 @@ export function valgus(
   calibration: Calibration,
   opts: Partial<ValgusOptions> = {},
 ): Metric<ValgusResult> {
-  const o: ValgusOptions = { ...DEFAULTS };
-  for (const [k, v] of Object.entries(opts)) {
-    if (v !== undefined) (o as Record<string, unknown>)[k] = v;
-  }
+  const o: ValgusOptions = withDefaults(DEFAULTS, opts);
   const frames = track.frames;
   const standing = calibration.standingFrames.filter((i) => i >= 0 && i < frames.length);
   const window = repWindow(track, rep, calibration, o.minDepthNorm);
