@@ -236,7 +236,8 @@ with |hip velocity| < 5% of peak; `ascentS` = end of pause→end. From `t`, neve
 Per leg FPPA = 180° − ∠(hip, knee, ankle) signed so medial knee displacement is positive.
 Evaluate over rep frames with depthNorm ≥ 0.3 up to bottom and back; take the worst change
 vs the standing baseline. `kneeAnkleRatio = kneeDistance/ankleDistance`, change vs standing.
-Flag if FPPA change > 10° on either leg or ratio change < −0.15. Confidence = f(visibility,
+Flag if FPPA change > 10° on either leg or ratio change < −0.20 (first guess −0.15 fired at ~5° shin cave on
+the synthetic figure; see `valgus.ts` DEFAULTS). Confidence = f(visibility,
 signal jitter across the window); never above `medium` (2D frontal knee r = 0.20 vs 3D).
 
 ### 5.9 Asymmetry, frontal (`metrics/asymmetry.ts`)
