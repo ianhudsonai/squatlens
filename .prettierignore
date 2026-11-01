@@ -1,0 +1,10 @@
+dist
+coverage
+public/models
+public/wasm
+playwright-report
+test-results
+package-lock.json
+# Kept byte-identical to the contract in docs/SPEC.md §3.
+src/core/types.ts
+docs
