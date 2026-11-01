@@ -25,8 +25,13 @@ export function HipChart({ track, reps, s }: Props) {
 
   const t0 = series[0]!.t;
   const t1 = series[series.length - 1]!.t;
-  const yMin = Math.min(...ys);
-  const yMax = Math.max(...ys);
+  // A loop, not Math.min(...ys): spreading a long clip's frames can exceed the argument limit.
+  let yMin = Infinity;
+  let yMax = -Infinity;
+  for (const v of ys) {
+    if (v < yMin) yMin = v;
+    if (v > yMax) yMax = v;
+  }
   const ySpan = yMax - yMin || 1;
   const tSpan = t1 - t0 || 1;
   const x = (t: number) => PAD.left + ((t - t0) / tSpan) * (W - PAD.left - PAD.right);

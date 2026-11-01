@@ -3,13 +3,11 @@
  * is here. PT-BR is the default; the choice is persisted in localStorage.
  */
 import { LANGS, type Lang } from '../core/cues';
-import type { Confidence, DepthClass, NullReason, QualityReport, View } from '../core/types';
+import type { Confidence, DepthClass, NullReason, View } from '../core/types';
 import type { ModelVariant } from '../pose/options';
 
 export type { Lang };
 export { LANGS };
-
-type Problem = QualityReport['problems'][number];
 
 export interface UiStrings {
   langName: string;
@@ -28,6 +26,7 @@ export interface UiStrings {
   cancel: string;
   error: (msg: string) => string;
   canceled: string;
+  poseSummary: (found: number, total: number, model: string, delegate: string) => string;
   results: string;
   viewBadge: string;
   views: Record<View, string>;
@@ -37,7 +36,6 @@ export interface UiStrings {
   confidences: Record<Confidence, string>;
   qualityBad: string;
   qualityWarn: string;
-  problems: Record<Problem, string>;
   quality: (visiblePct: number, fps: string) => string;
   reps: string;
   repN: (n: number) => string;
@@ -64,6 +62,7 @@ export interface UiStrings {
   asymDetail: (shiftPct: string) => string;
   velocityLoss: string;
   velocityLossValue: (pct: string) => string;
+  velocityGainValue: (pct: string) => string;
   chartTitle: string;
   chartDesc: (reps: number) => string;
   chartTime: string;
@@ -94,6 +93,7 @@ const ptBR: UiStrings = {
   cancel: 'Cancelar',
   error: (m) => `Erro: ${m}`,
   canceled: 'Análise cancelada.',
+  poseSummary: (f, t, m, d) => `Pose detectada em ${f} de ${t} quadros (${m}, ${d}).`,
   results: 'Resultado',
   viewBadge: 'Ângulo da câmera',
   views: { lateral: 'De lado', frontal: 'De frente', diagonal: 'Diagonal', unknown: 'Indefinido' },
@@ -103,14 +103,6 @@ const ptBR: UiStrings = {
   confidences: { low: 'baixa', medium: 'média', high: 'alta' },
   qualityBad: 'Não deu para analisar este vídeo',
   qualityWarn: 'Atenção',
-  problems: {
-    no_pose: 'Nenhuma pessoa detectada.',
-    low_visibility: 'Corpo pouco visível na maior parte do vídeo.',
-    low_fps: 'Poucos quadros úteis por segundo.',
-    cut_off: 'Cabeça ou pés saem do quadro.',
-    diagonal_view: 'Câmera na diagonal: só o ritmo é medido.',
-    tilted_camera: 'A câmera parece inclinada.',
-  },
   quality: (v, f) => `${v}% dos quadros visíveis, ${f} quadros úteis/s`,
   reps: 'Repetições',
   repN: (n) => `Rep ${n}`,
@@ -141,12 +133,13 @@ const ptBR: UiStrings = {
   tempoDetail: (d, p, a) => `descida ${d} s · pausa ${p} s · subida ${a} s`,
   valgusFlagged: 'Joelhos entraram',
   valgusOk: 'Sem valgo marcado',
-  fppa: (l, r) => `variação do ângulo do joelho: esq. ${l}°, dir. ${r}°`,
+  fppa: (l, r) => `variação do ângulo do joelho: esq. ${l}, dir. ${r}`,
   asymFlagged: 'Desigual',
   asymOk: 'Simétrico',
   asymDetail: (s) => `desvio do quadril: ${s}% do fêmur`,
   velocityLoss: 'Perda de velocidade (quadril)',
   velocityLossValue: (p) => `${p}% da primeira para a última rep`,
+  velocityGainValue: (p) => `nenhuma: a última rep subiu ${p}% mais rápido que a primeira`,
   chartTitle: 'Altura do quadril ao longo do tempo',
   chartDesc: (n) =>
     `Gráfico da altura do quadril; ${n} repetição(ões) sombreada(s), com o fundo de cada uma marcado.`,
@@ -177,6 +170,7 @@ const en: UiStrings = {
   cancel: 'Cancel',
   error: (m) => `Error: ${m}`,
   canceled: 'Analysis canceled.',
+  poseSummary: (f, t, m, d) => `Pose found in ${f} of ${t} frames (${m}, ${d}).`,
   results: 'Result',
   viewBadge: 'Camera angle',
   views: { lateral: 'Side', frontal: 'Front', diagonal: 'Diagonal', unknown: 'Unknown' },
@@ -186,14 +180,6 @@ const en: UiStrings = {
   confidences: { low: 'low', medium: 'medium', high: 'high' },
   qualityBad: 'This video could not be analyzed',
   qualityWarn: 'Heads up',
-  problems: {
-    no_pose: 'No person detected.',
-    low_visibility: 'Body poorly visible for most of the video.',
-    low_fps: 'Too few usable frames per second.',
-    cut_off: 'Head or feet leave the frame.',
-    diagonal_view: 'Diagonal camera: only tempo is measured.',
-    tilted_camera: 'The camera looks tilted.',
-  },
   quality: (v, f) => `${v}% of frames visible, ${f} usable frames/s`,
   reps: 'Reps',
   repN: (n) => `Rep ${n}`,
@@ -224,12 +210,13 @@ const en: UiStrings = {
   tempoDetail: (d, p, a) => `down ${d} s · pause ${p} s · up ${a} s`,
   valgusFlagged: 'Knees caved in',
   valgusOk: 'No marked valgus',
-  fppa: (l, r) => `knee angle change: left ${l}°, right ${r}°`,
+  fppa: (l, r) => `knee angle change: left ${l}, right ${r}`,
   asymFlagged: 'Uneven',
   asymOk: 'Symmetric',
   asymDetail: (s) => `hip shift: ${s}% of femur length`,
   velocityLoss: 'Velocity loss (hip)',
   velocityLossValue: (p) => `${p}% from first to last rep`,
+  velocityGainValue: (p) => `none: the last rep rose ${p}% faster than the first`,
   chartTitle: 'Hip height over time',
   chartDesc: (n) => `Hip height chart; ${n} rep(s) shaded, with the bottom of each marked.`,
   chartTime: 'time (s)',

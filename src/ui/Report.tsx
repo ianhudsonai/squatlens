@@ -19,18 +19,26 @@ interface Props {
 type MetricKey = keyof UiStrings['metrics'];
 const METRIC_KEYS: readonly MetricKey[] = ['depth', 'trunk', 'tempo', 'valgus', 'asymmetry'];
 
+type Problem = QualityReport['problems'][number];
+
 /** Problems that block the report; the rest are warnings shown next to the metrics. */
-const BLOCKING: ReadonlySet<QualityReport['problems'][number]> = new Set([
-  'no_pose',
-  'low_visibility',
-  'low_fps',
-  'cut_off',
-]);
+const BLOCKING: ReadonlySet<Problem> = new Set(['no_pose', 'low_visibility', 'low_fps', 'cut_off']);
+
+/** CueId `generateCues` emits for a quality problem (core/cues/generate.ts). */
+function problemCueId(p: Problem): string {
+  return p === 'diagonal_view' ? 'view.diagonal' : `quality.${p}`;
+}
 
 /** Result screen for one analyzed set (SPEC §7). Pure rendering from a `SetReport`. */
 export function Report({ report, track, lang, s, baseName, player }: Props) {
   const { quality, view } = report;
   const warnings = quality.problems.filter((p) => !BLOCKING.has(p));
+  // The banner shows the problems (with their refilm advice), so the tip list skips them.
+  const problemText = (p: Problem) =>
+    renderCue({ id: problemCueId(p), repIndex: null, severity: 'warn', params: {} }, lang);
+  const bannerIds = new Set(quality.problems.map(problemCueId));
+  const cues = report.cues.filter((c) => !bannerIds.has(c.id));
+  const loss = report.velocityLoss.value;
 
   return (
     <section className="report" aria-labelledby="report-title">
@@ -53,7 +61,7 @@ export function Report({ report, track, lang, s, baseName, player }: Props) {
           <strong>{s.qualityBad}</strong>
           <ul>
             {quality.problems.map((p) => (
-              <li key={p}>{s.problems[p]}</li>
+              <li key={p}>{problemText(p)}</li>
             ))}
           </ul>
         </div>
@@ -63,7 +71,7 @@ export function Report({ report, track, lang, s, baseName, player }: Props) {
             <strong>{s.qualityWarn}</strong>
             <ul>
               {warnings.map((p) => (
-                <li key={p}>{s.problems[p]}</li>
+                <li key={p}>{problemText(p)}</li>
               ))}
             </ul>
           </div>
@@ -82,9 +90,12 @@ export function Report({ report, track, lang, s, baseName, player }: Props) {
               ))}
             </ol>
           )}
-          {report.velocityLoss.value !== null && (
+          {loss !== null && (
             <p data-testid="velocity-loss">
-              {s.velocityLoss}: {s.velocityLossValue(fmt(report.velocityLoss.value * 100, 0, s))}
+              {s.velocityLoss}:{' '}
+              {loss >= 0
+                ? s.velocityLossValue(fmt(loss * 100, 0, s))
+                : s.velocityGainValue(fmt(-loss * 100, 0, s))}
               {report.velocityLoss.confidence &&
                 ` (${s.confidence} ${s.confidences[report.velocityLoss.confidence]})`}
             </p>
@@ -94,11 +105,11 @@ export function Report({ report, track, lang, s, baseName, player }: Props) {
       )}
 
       <h3>{s.cues}</h3>
-      {report.cues.length === 0 ? (
+      {cues.length === 0 ? (
         <p>{s.noCues}</p>
       ) : (
         <ul className="cue-list" data-testid="cue-list">
-          {report.cues.map((c, i) => (
+          {cues.map((c, i) => (
             <li key={i} className={`cue cue-${c.severity}`}>
               {c.repIndex !== null && <span className="cue-rep">{s.repN(c.repIndex + 1)}: </span>}
               {renderCue(c, lang)}
@@ -181,7 +192,7 @@ function MetricValue({ name, rep, s }: { name: MetricKey; rep: RepReport; s: UiS
     }
     case 'valgus': {
       const v = rep.valgus.value!;
-      const side = (d: number | null) => (d === null ? '—' : f0(d));
+      const side = (d: number | null) => (d === null ? '—' : `${f0(d)}°`);
       main = v.flagged ? s.valgusFlagged : s.valgusOk;
       detail = s.fppa(side(v.fppaChangeDeg.left), side(v.fppaChangeDeg.right));
       break;

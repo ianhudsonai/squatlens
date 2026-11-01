@@ -34,7 +34,7 @@ function progress(n: number, d: number | null): string {
   return d ? `${Math.min(100, Math.round((100 * n) / d))}%` : `${(n / 1e6).toFixed(1)} MB`;
 }
 
-function statusText(status: Status, s: UiStrings): string {
+function statusText(status: Status, s: UiStrings, result: Result | null): string {
   switch (status.kind) {
     case 'model':
       return s.downloadingModel(progress(status.loaded, status.total));
@@ -44,6 +44,12 @@ function statusText(status: Status, s: UiStrings): string {
       return s.analyzingFrames(status.done, status.total);
     case 'canceled':
       return s.canceled;
+    case 'done': {
+      if (!result) return '';
+      const { frames, meta } = result.track;
+      const found = frames.filter((f) => f.lm).length;
+      return s.poseSummary(found, frames.length, meta?.model ?? '?', meta?.delegate ?? '?');
+    }
     case 'error':
       return s.error(status.message);
     default:
@@ -87,7 +93,7 @@ export function App() {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
-    setResult(null);
+    // The previous report stays until the new one is ready (a cancel or error keeps it).
     setStatus({ kind: 'model', loaded: 0, total: null });
     let landmarker: { close(): void } | null = null;
     try {
@@ -190,7 +196,7 @@ export function App() {
 
       <div className="status-row">
         <p role="status" aria-live="polite">
-          {statusText(status, s)}
+          {statusText(status, s, result)}
         </p>
         {status.kind === 'frames' && (
           <progress max={status.total} value={status.done} aria-hidden="true" />

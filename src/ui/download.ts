@@ -8,7 +8,8 @@ export function downloadJson(data: unknown, fileName: string) {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
+  // Some browsers read the blob after click() returns; revoking at once can cancel the save.
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
 /** File name without its extension, for naming exports after the source video. */

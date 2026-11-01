@@ -76,7 +76,7 @@ describe('Report', () => {
     expect(card.getByTestId('metric-tempo').textContent).not.toContain('sem dados');
   });
 
-  it('bad quality: banner with problems, no metrics, only quality cues', () => {
+  it('bad quality: banner with the problems, no metrics, problems not repeated as tips', () => {
     const bad: SetReport = {
       ...lateral,
       quality: {
@@ -92,13 +92,34 @@ describe('Report', () => {
     show(bad, lateralTrack);
     const banner = screen.getByRole('alert');
     expect(banner.textContent).toContain('Não deu para analisar este vídeo');
-    expect(within(banner).getAllByRole('listitem')).toHaveLength(2);
+    const items = within(banner).getAllByRole('listitem');
+    expect(items).toHaveLength(2);
+    expect(items[1]!.textContent).toContain('Parte do corpo saiu do quadro');
     expect(screen.queryAllByTestId('rep-card')).toHaveLength(0);
     expect(screen.queryByTestId('chart-rep')).toBeNull();
     expect(screen.queryByTestId('velocity-loss')).toBeNull();
-    expect(within(screen.getByTestId('cue-list')).getAllByRole('listitem')).toHaveLength(2);
+    expect(screen.queryByTestId('cue-list')).toBeNull();
     // Exports stay available for debugging a bad clip.
     expect(screen.getByRole('button', { name: 'Exportar análise (JSON)' })).toBeTruthy();
+  });
+
+  it('a faster last rep reads as no loss, not a negative loss', () => {
+    show({ ...lateral, velocityLoss: { value: -0.15, confidence: 'high' } }, lateralTrack);
+    const text = screen.getByTestId('velocity-loss').textContent!;
+    expect(text).toContain('15% mais rápido');
+    expect(text).not.toContain('-');
+  });
+
+  it('a knee with no FPPA shows a dash without a degree sign', () => {
+    const rep = frontal.reps[0]!;
+    const v = rep.valgus.value!;
+    const r: RepReport = {
+      ...rep,
+      valgus: { ...rep.valgus, value: { ...v, fppaChangeDeg: { left: null, right: 12 } } },
+    };
+    show({ ...frontal, reps: [r] }, frontalTrack);
+    const t = screen.getByTestId('metric-valgus').textContent!;
+    expect(t).toContain('esq. —, dir. 12°');
   });
 
   it('non-blocking problems show a warning next to the metrics', () => {
