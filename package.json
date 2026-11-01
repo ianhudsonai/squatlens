@@ -20,7 +20,8 @@
     "test:watch": "vitest",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "fetch-models": "node scripts/fetch-models.mjs"
+    "fetch-models": "node scripts/fetch-models.mjs",
+    "eval": "node eval/cli.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "1.2.0",

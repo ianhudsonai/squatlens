@@ -6,3 +6,6 @@ public/wasm/
 playwright-report/
 test-results/
 .env*
+
+# Synthetic eval output (npm run eval -- --synthetic); regenerate locally.
+eval/synthetic/RESULTS.md
