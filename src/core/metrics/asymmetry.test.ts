@@ -71,6 +71,8 @@ describe('asymmetry', () => {
     expect(res.value!.hipHeightDiffNorm).toBeCloseTo(40 / femur, 1);
     expect(res.value!.hipHeightDiffNorm).toBeGreaterThan(DEFAULTS.hipHeightFlag);
     expect(res.value!.flagged).toBe(true);
+    // A hip drop is not a lateral shift.
+    expect(Math.abs(res.value!.hipShiftNorm)).toBeLessThan(0.03);
   });
 
   it('reports knee flexion difference only when the thighs are not foreshortened', () => {

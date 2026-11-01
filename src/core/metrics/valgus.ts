@@ -26,8 +26,9 @@
  * 2D frontal-plane knee kinematics agree poorly with 3D motion capture (knee abduction angle
  * r = 0.20 between 2D FPPA and 3D; J Biomech 2022). This metric is therefore an *alert*, not
  * a measurement: confidence is `medium` at best, and `low` when landmark visibility is weak,
- * points in the window were interpolated, only one leg is measurable, or the FPPA signal is
- * jittery (mean absolute frame-to-frame second difference above `maxJitterDeg`).
+ * points in the window were interpolated, a leg lacks usable landmarks, or the FPPA signal is
+ * jittery (mean absolute frame-to-frame second difference above `maxJitterDeg`). A leg whose
+ * FPPA was skipped only because the thigh was foreshortened does not lower confidence.
  *
  * Returns `{ value: null, reason }` (SPEC §0 rule 3) when there is no standing baseline, the
  * window is too short (`insufficient_frames`), or too few window frames have usable landmarks
@@ -68,6 +69,11 @@ export const DEFAULTS = {
    * points at the camera, the projected hip lands next to the knee and the angle is noise.
    */
   minThighFrac: 0.5,
+  /**
+   * The knee/ankle ratio is skipped when the ankles are closer than this many mean standing
+   * femur lengths (narrow or feet-together stance: the ratio would be noise).
+   */
+  minAnkleDistFemur: 0.3,
 };
 
 export type ValgusOptions = typeof DEFAULTS;
@@ -102,15 +108,18 @@ export function fppaDeg(frame: PxFrame, side: Side, minThighPx = 0): number | nu
   return medial >= 0 ? mag : -mag;
 }
 
-/** kneeDistance / ankleDistance in one frame, or null when a point is missing or feet touch. */
-export function kneeAnkleRatio(frame: PxFrame): number | null {
+/**
+ * kneeDistance / ankleDistance in one frame, or null when a point is missing or the ankles are
+ * closer than `minAnklePx` (with the feet together the ratio is dominated by landmark noise).
+ */
+export function kneeAnkleRatio(frame: PxFrame, minAnklePx = 0): number | null {
   const lk = frame.pts[SIDE_JOINTS.left.knee];
   const rk = frame.pts[SIDE_JOINTS.right.knee];
   const la = frame.pts[SIDE_JOINTS.left.ankle];
   const ra = frame.pts[SIDE_JOINTS.right.ankle];
   if (!lk || !rk || !la || !ra) return null;
   const ad = dist(la, ra);
-  return ad > 0 ? dist(lk, rk) / ad : null;
+  return ad > 0 && ad >= minAnklePx ? dist(lk, rk) / ad : null;
 }
 
 function median(xs: number[]): number | null {
@@ -121,9 +130,10 @@ function median(xs: number[]): number | null {
 }
 
 /**
- * Frame indices of the rep whose per-frame depth (hip-mid y below standing, relative to the
- * rep's bottom) is at least `minDepthNorm`. Empty when the bottom hip is not usable or the
- * rep has no measurable depth.
+ * Contiguous frame range of the rep, from the first to the last frame whose per-frame depth
+ * (hip-mid y below standing, relative to the rep's deepest usable hip-mid) is at least
+ * `minDepthNorm`. Frames inside the range with a missing hip stay in it, so neighbouring
+ * indices are adjacent frames. Empty when no hip-mid is usable or the rep has no depth.
  */
 export function repWindow(
   track: PxTrack,
@@ -132,16 +142,24 @@ export function repWindow(
   minDepthNorm: number,
 ): number[] {
   const n = track.frames.length;
-  const bottom = track.frames[rep.bottomFrame];
-  const bh = bottom ? hipMid(bottom) : null;
-  if (!bh) return [];
-  const range = bh.y - calibration.standingHipY;
+  const lo = Math.max(0, rep.startFrame);
+  const hi = Math.min(n - 1, rep.endFrame);
+  const ys: Array<number | null> = [];
+  for (let i = lo; i <= hi; i++) ys.push(hipMid(track.frames[i]!)?.y ?? null);
+  const deepest = Math.max(-Infinity, ...ys.flatMap(nonNull));
+  const range = deepest - calibration.standingHipY;
   if (!(range > 0)) return [];
+  let first = -1;
+  let last = -1;
+  ys.forEach((y, k) => {
+    if (y !== null && (y - calibration.standingHipY) / range >= minDepthNorm) {
+      if (first < 0) first = k;
+      last = k;
+    }
+  });
+  if (first < 0) return [];
   const out: number[] = [];
-  for (let i = Math.max(0, rep.startFrame); i <= Math.min(n - 1, rep.endFrame); i++) {
-    const h = hipMid(track.frames[i]!);
-    if (h && (h.y - calibration.standingHipY) / range >= minDepthNorm) out.push(i);
-  }
+  for (let k = first; k <= last; k++) out.push(lo + k);
   return out;
 }
 
@@ -164,6 +182,12 @@ export function valgus(
   }
   const minUsable = Math.ceil(o.minUsableFrac * window.length);
 
+  // Per leg: 'ok' = measured, 'foreshortened' = landmarks fine but the thigh points at the
+  // camera in too many frames (skipped by design), 'missing' = not enough usable landmarks.
+  const legState: Record<Side, 'ok' | 'foreshortened' | 'missing'> = {
+    left: 'missing',
+    right: 'missing',
+  };
   const fppaChange: Record<Side, number | null> = { left: null, right: null };
   const jitters: number[] = [];
   for (const side of SIDES) {
@@ -171,21 +195,42 @@ export function valgus(
     const base = median(standing.flatMap((i) => nonNull(fppaDeg(frames[i]!, side))));
     if (base === null || femur === null) continue;
     const minThighPx = o.minThighFrac * femur;
-    // Frames with usable landmarks count toward coverage even when the thigh is too
-    // foreshortened to measure: skipping them is by design, not missing data.
-    const visible = window.filter((i) => fppaDeg(frames[i]!, side) !== null).length;
-    const series = window.map((i) => fppaDeg(frames[i]!, side, minThighPx));
-    const vals = series.flatMap(nonNull);
-    if (visible < minUsable || vals.length < o.minWindowFrames) continue;
-    fppaChange[side] = Math.max(...vals) - base;
+    let visible = 0;
+    const series = window.map((i) => {
+      const f = frames[i]!;
+      const v = fppaDeg(f, side);
+      if (v === null) return null;
+      visible++;
+      const j = SIDE_JOINTS[side];
+      return dist(f.pts[j.hip]!, f.pts[j.knee]!) >= minThighPx ? v : null;
+    });
+    if (visible < minUsable) continue;
+    const robust = rollingMedian3(series).flatMap(nonNull);
+    if (robust.length === 0) {
+      legState[side] = 'foreshortened';
+      continue;
+    }
+    legState[side] = 'ok';
+    fppaChange[side] = Math.max(...robust) - base;
     jitters.push(jitter(series));
   }
 
   let ratioChange: number | null = null;
-  const ratioBase = median(standing.flatMap((i) => nonNull(kneeAnkleRatio(frames[i]!))));
+  const femurs = [calibration.femurPx.left, calibration.femurPx.right].flatMap((x) =>
+    x === null ? [] : [x],
+  );
+  const minAnklePx =
+    femurs.length > 0
+      ? (o.minAnkleDistFemur * femurs.reduce((a, b) => a + b, 0)) / femurs.length
+      : Infinity;
+  const ratioAt = (i: number) => kneeAnkleRatio(frames[i]!, minAnklePx);
+  const ratioBase = median(standing.flatMap((i) => nonNull(ratioAt(i))));
   if (ratioBase !== null && ratioBase > 0) {
-    const vals = window.flatMap((i) => nonNull(kneeAnkleRatio(frames[i]!)));
-    if (vals.length >= minUsable) ratioChange = (Math.min(...vals) - ratioBase) / ratioBase;
+    const series = window.map(ratioAt);
+    if (series.flatMap(nonNull).length >= minUsable) {
+      const robust = rollingMedian3(series).flatMap(nonNull);
+      if (robust.length > 0) ratioChange = (Math.min(...robust) - ratioBase) / ratioBase;
+    }
   }
 
   if (fppaChange.left === null && fppaChange.right === null && ratioChange === null) {
@@ -199,11 +244,13 @@ export function valgus(
     }) ||
     (ratioChange !== null && ratioChange < o.ratioFlag);
 
-  const bothLegs = fppaChange.left !== null && fppaChange.right !== null;
   const { meanVis, interpFrac } = legVisibility(frames, window);
-  const smooth = jitters.length > 0 && jitters.every((j) => j <= o.maxJitterDeg);
   const confidence: Confidence =
-    bothLegs && smooth && meanVis >= o.mediumMinVisibility && interpFrac <= o.maxInterpolatedFrac
+    legState.left !== 'missing' &&
+    legState.right !== 'missing' &&
+    jitters.every((j) => j <= o.maxJitterDeg) &&
+    meanVis >= o.mediumMinVisibility &&
+    interpFrac <= o.maxInterpolatedFrac
       ? 'medium'
       : 'low';
 
@@ -211,6 +258,19 @@ export function valgus(
     value: { fppaChangeDeg: fppaChange, kneeAnkleRatioChange: ratioChange, flagged },
     confidence,
   };
+}
+
+/**
+ * Median of each value with its two neighbours, null unless all three are non-null, so a
+ * single glitch frame cannot become the window's worst value.
+ */
+function rollingMedian3(series: Array<number | null>): Array<number | null> {
+  return series.map((v, i) => {
+    const a = series[i - 1];
+    const c = series[i + 1];
+    if (v === null || a == null || c == null) return null;
+    return Math.max(Math.min(a, v), Math.min(Math.max(a, v), c));
+  });
 }
 
 function nonNull(x: number | null): number[] {

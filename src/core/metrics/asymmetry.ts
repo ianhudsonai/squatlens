@@ -6,8 +6,9 @@
  *
  * - `hipShiftNorm`: hip-mid x minus ankle-mid x, divided by the mean standing femur length
  *   (`calibration.femurPx`). Signed toward the subject's own sides: positive = hips shifted
- *   toward the subject's left, using the right-hip → left-hip direction in each frame, so the
- *   sign is the same whether the subject faces the camera or has their back to it.
+ *   toward the subject's left, using which side of the image the left hip is on in each
+ *   frame, so the sign is the same whether the subject faces the camera or has their back to
+ *   it. Only the horizontal offset counts, so a hip drop is not read as a shift.
  * - `hipHeightDiffNorm`: left hip y minus right hip y over the same femur length.
  *   Image y grows downward, so positive = left hip lower than the right.
  * - `kneeFlexDiffDeg`: left minus right 2D knee flexion (`180° − ∠(hip, knee, ankle)`), or
@@ -66,15 +67,12 @@ function hipSignals(f: PxFrame): { shift: number; heightDiff: number } | null {
   const la = f.pts[L.ankle];
   const ra = f.pts[R.ankle];
   if (!lh || !rh || !la || !ra) return null;
+  // Horizontal offset only (SPEC: hip-mid x vs ankle-mid x), so a hip drop does not leak in.
+  // Signed by which way the subject's left hip lies in the image (facing vs back to camera).
   const ax = lh.x - rh.x;
-  const ay = lh.y - rh.y;
-  const axisLen = Math.hypot(ax, ay);
-  if (axisLen === 0) return null;
+  if (ax === 0) return null;
   const dx = (lh.x + rh.x) / 2 - (la.x + ra.x) / 2;
-  const dy = (lh.y + rh.y) / 2 - (la.y + ra.y) / 2;
-  // Component of the hip-mid offset along the subject's right→left hip axis.
-  const shift = (dx * ax + dy * ay) / axisLen;
-  return { shift, heightDiff: lh.y - rh.y };
+  return { shift: ax > 0 ? dx : -dx, heightDiff: lh.y - rh.y };
 }
 
 /** Asymmetry at the bottom of one rep. See the file header. */

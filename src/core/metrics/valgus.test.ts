@@ -6,6 +6,7 @@ import {
   L_ANKLE,
   L_FOOT_INDEX,
   L_HEEL,
+  L_HIP,
   L_KNEE,
   R_ANKLE,
   R_FOOT_INDEX,
@@ -188,6 +189,38 @@ describe('valgus', () => {
       expect(Math.abs(b.fppaChangeDeg.right! - a.fppaChangeDeg.right!)).toBeLessThan(1.5);
       expect(Math.abs(b.kneeAnkleRatioChange! - a.kneeAnkleRatioChange!)).toBeLessThan(0.01);
     }
+  });
+
+  it('ignores a single glitch frame', () => {
+    const rep = truthRep({ view: 'frontal' });
+    const { res } = run({}, (t) => {
+      const f = t.frames[rep.bottomFrame - 10]!;
+      f.lm![L_KNEE]!.x -= 120 / t.width; // one-frame medial jump of the left knee
+    });
+    expect(res.value!.flagged).toBe(false);
+  });
+
+  it('skips the knee/ankle ratio with the feet together, keeping FPPA', () => {
+    const { res } = run({ valgusDeg: 15 }, (t) => {
+      for (const f of t.frames) {
+        if (!f.lm) continue;
+        const mx = (f.lm[L_ANKLE]!.x + f.lm[R_ANKLE]!.x) / 2;
+        f.lm[L_ANKLE]!.x = mx + 10 / t.width;
+        f.lm[R_ANKLE]!.x = mx - 10 / t.width;
+      }
+    });
+    expect(res.value!.kneeAnkleRatioChange).toBeNull();
+    expect(res.value!.fppaChangeDeg.left).not.toBeNull();
+  });
+
+  it('still measures when the hips are hidden at the bottom frame only', () => {
+    const rep = truthRep({ view: 'frontal' });
+    const { res } = run({ valgusDeg: 15 }, (t) => {
+      for (const i of [rep.bottomFrame - 2, rep.bottomFrame, rep.bottomFrame + 2]) {
+        t.frames[i]!.lm![L_HIP]!.visibility = 0.1;
+      }
+    });
+    expect(res.value!.flagged).toBe(true);
   });
 
   it('is deterministic', () => {
