@@ -13,3 +13,34 @@ main {
   margin: 0 auto;
   padding: 1.5rem;
 }
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+}
+
+.file-button input {
+  display: block;
+}
+
+.player {
+  position: relative;
+  margin: 1rem 0;
+}
+
+.player video {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* Same box as the video (width 100%, height from aspect ratio), so landmarks line up. */
+.skeleton-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}

@@ -23,6 +23,12 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      # Models are SHA-256 pinned in the script, so its hash is a sound cache key.
+      - uses: actions/cache@v4
+        with:
+          path: public/models
+          key: pose-models-${{ hashFiles('scripts/fetch-models.mjs') }}
+      - run: npm run fetch-models
       - run: npm run lint
       - run: npm run format:check
       - run: npm run typecheck
