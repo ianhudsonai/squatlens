@@ -27,4 +27,5 @@ jobs:
       - run: npm run format:check
       - run: npm run typecheck
       - run: npm test
-      - run: npm run build
+      # typecheck already ran above; `npm run build` would repeat tsc -b.
+      - run: npx vite build

@@ -16,16 +16,22 @@ describe('landmarks', () => {
   it('uses odd indices for the left side and even for the right (ears down)', () => {
     for (const [name, value] of indexConstants) {
       if (name.includes('EYE')) continue; // eyes 1-6 are grouped per side, not alternating
-      if (name.startsWith('L_') || name.endsWith('_L')) expect(value % 2, name).toBe(1);
-      if (name.startsWith('R_') || name.endsWith('_R')) expect(value % 2, name).toBe(0);
+      if (name.startsWith('L_')) expect(value % 2, name).toBe(1);
+      if (name.startsWith('R_')) expect(value % 2, name).toBe(0);
     }
   });
 
-  it('maps SIDE_JOINTS to the matching side constants', () => {
-    expect(lm.SIDE_JOINTS.left.hip).toBe(lm.L_HIP);
-    expect(lm.SIDE_JOINTS.right.knee).toBe(lm.R_KNEE);
-    expect(lm.SIDE_JOINTS.left.ankle % 2).toBe(1);
-    expect(lm.SIDE_JOINTS.right.ankle % 2).toBe(0);
+  it('maps every SIDE_JOINTS field to the matching side constant', () => {
+    const constants = lm as unknown as Record<string, number>;
+    for (const side of ['left', 'right'] as const) {
+      const prefix = side === 'left' ? 'L_' : 'R_';
+      for (const [joint, index] of Object.entries(lm.SIDE_JOINTS[side])) {
+        // footIndex -> FOOT_INDEX
+        const name = prefix + joint.replace(/([A-Z])/g, '_$1').toUpperCase();
+        expect(constants[name], `${side}.${joint} -> ${name}`).toBeTypeOf('number');
+        expect(index, `${side}.${joint}`).toBe(constants[name]);
+      }
+    }
   });
 
   it('accepts a minimal PoseTrack literal (type contract smoke test)', () => {

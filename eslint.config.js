@@ -7,7 +7,7 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 // Pure-core paths (SPEC §0 rule 4): no DOM, no React, no MediaPipe.
-const PURE_CORE = ['src/core/**/*.ts', 'test/synthetic/**/*.ts'];
+const PURE_CORE = ['src/core/**/*.{ts,tsx}', 'test/synthetic/**/*.{ts,tsx}'];
 
 export default defineConfig([
   globalIgnores([
@@ -37,21 +37,17 @@ export default defineConfig([
       'no-restricted-imports': [
         'error',
         {
-          paths: [
-            { name: 'react', message: 'src/core must stay framework-free (SPEC §0.4).' },
-            { name: 'react-dom', message: 'src/core must stay framework-free (SPEC §0.4).' },
-          ],
           patterns: [
+            {
+              group: ['react', 'react/*', 'react-dom', 'react-dom/*'],
+              message: 'src/core must stay framework-free (SPEC §0.4).',
+            },
             {
               group: ['@mediapipe/*'],
               message: 'src/core must not import MediaPipe; consume a PoseTrack (SPEC §0.4).',
             },
             {
-              group: ['react/*', 'react-dom/*'],
-              message: 'src/core must stay framework-free (SPEC §0.4).',
-            },
-            {
-              group: ['**/pose/**', '**/ui/**'],
+              group: ['**/pose', '**/pose/**', '**/ui', '**/ui/**'],
               message: 'src/core must not depend on src/pose or src/ui (SPEC §0.4).',
             },
           ],
@@ -73,10 +69,38 @@ export default defineConfig([
           'HTMLElement',
           'HTMLVideoElement',
           'HTMLCanvasElement',
+          'OffscreenCanvas',
+          'ImageData',
+          'ImageBitmap',
+          'createImageBitmap',
+          'Image',
+          'crypto',
+          'globalThis',
         ].map((name) => ({
           name,
           message: `src/core must not touch DOM/browser globals ("${name}"); keep it pure (SPEC §0.4).`,
         })),
+      ],
+      // Determinism (SPEC §0.4): no wall clock, no unseeded randomness.
+      'no-restricted-properties': [
+        'error',
+        {
+          object: 'Math',
+          property: 'random',
+          message: 'Use a seeded RNG; core must be deterministic.',
+        },
+        {
+          object: 'Date',
+          property: 'now',
+          message: 'Use PoseFrame.t; core must be deterministic.',
+        },
+      ],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "NewExpression[callee.name='Date']",
+          message: 'Use PoseFrame.t; core must be deterministic.',
+        },
       ],
     },
   },
