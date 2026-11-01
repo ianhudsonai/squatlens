@@ -18,6 +18,7 @@
  * `femurPx[side]` is the median 2D hip-knee length over standing frames. Every distance
  * normalization in later stages divides by this, never by a per-frame length.
  */
+import { withDefaults } from './options';
 import { angleDeg, dist, mid } from './geometry';
 import type { Px } from './geometry';
 import { L_HIP, L_SHOULDER, R_HIP, R_SHOULDER, SIDE_JOINTS } from './landmarks';
@@ -79,15 +80,6 @@ function percentile(xs: number[], p: number): number {
   const lo = Math.floor(pos);
   const hi = Math.min(lo + 1, s.length - 1);
   return s[lo]! + (s[hi]! - s[lo]!) * (pos - lo);
-}
-
-/** Spread that ignores keys explicitly set to undefined. */
-export function withDefaults<T extends object>(defaults: T, opts: Partial<T>): T {
-  const out = { ...defaults };
-  for (const [k, v] of Object.entries(opts)) {
-    if (v !== undefined) (out as Record<string, unknown>)[k] = v;
-  }
-  return out;
 }
 
 /** Median of a list, or null when empty. */

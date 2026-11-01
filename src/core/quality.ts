@@ -29,7 +29,8 @@
  * Every threshold is an uncalibrated starting guess until validated on real clips (SPEC §10).
  */
 import { signedAngleToVerticalDeg } from './geometry';
-import { hipMid, median, shoulderMid, withDefaults } from './calibration';
+import { hipMid, median, shoulderMid } from './calibration';
+import { withDefaults } from './options';
 import { L_HIP, NOSE, R_HIP, SIDE_JOINTS } from './landmarks';
 import type { PxFrame, PxTrack } from './smoothing';
 import type { Calibration, QualityReport, Side, ViewResult } from './types';

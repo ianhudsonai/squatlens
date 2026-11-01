@@ -27,15 +27,6 @@ export const DEFAULTS = {
 
 export type LateralOptions = typeof DEFAULTS;
 
-/** `{...defaults, ...opts}` that ignores keys of `opts` explicitly set to undefined. */
-export function withDefaults<T extends object>(defaults: T, opts: Partial<T>): T {
-  const out = { ...defaults };
-  for (const [k, v] of Object.entries(opts)) {
-    if (v !== undefined) (out as Record<string, unknown>)[k] = v;
-  }
-  return out;
-}
-
 export type WindowCheck =
   | { ok: true; confidence: Confidence }
   | { ok: false; reason: 'low_visibility' | 'insufficient_frames' };

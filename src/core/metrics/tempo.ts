@@ -24,6 +24,7 @@
  * `ascentHipVel` = net hip rise during the ascent / ascent time, in standing femur lengths
  * per second (mean of the available `femurPx` sides). This is hip speed, not bar speed.
  */
+import { withDefaults } from '../options';
 import { hipMid } from '../calibration';
 import type { PxTrack } from '../smoothing';
 import type { Calibration, Confidence, Metric, Rep, TempoResult } from '../types';
@@ -45,15 +46,6 @@ export const DEFAULTS = {
 };
 
 export type TempoOptions = typeof DEFAULTS;
-
-/** Spread that ignores keys explicitly set to undefined. */
-function withDefaults<T extends object>(defaults: T, opts: Partial<T>): T {
-  const out = { ...defaults };
-  for (const [k, v] of Object.entries(opts)) {
-    if (v !== undefined) (out as Record<string, unknown>)[k] = v;
-  }
-  return out;
-}
 
 /** Mean of the available standing femur lengths, px, or null. */
 function femurPx(calibration: Calibration): number | null {

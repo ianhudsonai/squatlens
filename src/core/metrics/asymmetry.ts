@@ -24,6 +24,7 @@
  * `mediumMinVisibility`, otherwise `low`. Null with `low_visibility` when hips, ankles or a
  * standing femur length are unavailable (SPEC §0 rule 3).
  */
+import { withDefaults } from '../options';
 import { kneeFlexDeg } from '../calibration';
 import { dist } from '../geometry';
 import { SIDE_JOINTS } from '../landmarks';
@@ -82,10 +83,7 @@ export function asymmetry(
   calibration: Calibration,
   opts: Partial<AsymmetryOptions> = {},
 ): Metric<AsymmetryResult> {
-  const o: AsymmetryOptions = { ...DEFAULTS };
-  for (const [k, v] of Object.entries(opts)) {
-    if (v !== undefined) (o as Record<string, unknown>)[k] = v;
-  }
+  const o: AsymmetryOptions = withDefaults(DEFAULTS, opts);
   const n = track.frames.length;
   const lo = Math.max(0, rep.bottomFrame - o.bottomHalfWindow);
   const hi = Math.min(n - 1, rep.bottomFrame + o.bottomHalfWindow);
