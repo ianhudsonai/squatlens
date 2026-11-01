@@ -213,7 +213,7 @@ enter descending at depthNorm > 0.15, exit to standing at < 0.08; a rep needs de
 A rep counts only after returning to standing. Rep `depthNorm` relative to deepest rep.
 
 ### 5.5 Depth, lateral (`metrics/depth.ts`)
-At `bottomFrame`, camera side: `delta = (kneeY - hipY)/femurPx` (y down; positive = hip
+At `bottomFrame`, camera side: `delta = (hipY - kneeY)/femurPx` (y down; positive = hip
 below knee). `below` if delta > +0.05, `above` if < −0.05, `parallel` within ±0.05,
 `borderline` when within ±0.02 of either boundary. `thighAngleDeg = atan2(kneeY - hipY, |kneeX - hipX|)`
 (positive = knee lower than hip = above parallel). `kneeFlexDeg = 180 − ∠(hip, knee, ankle)`.

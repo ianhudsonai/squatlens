@@ -4,6 +4,7 @@ import type { SquatOptions } from '../../../test/synthetic/makeSquatTrack';
 import { truthReps } from '../../../test/synthetic/truthReps';
 import { calibrate } from '../calibration';
 import { L_SHOULDER, R_HIP, R_SHOULDER } from '../landmarks';
+import { depth } from './depth';
 import { preprocess } from '../smoothing';
 import type { PreprocessOptions } from '../smoothing';
 import { isCameraTilted, standingTiltDeg } from './lateral';
@@ -98,5 +99,33 @@ describe('trunk (lateral)', () => {
     const level = setup({ tiltDeg: 5 });
     expect(isCameraTilted(level.px, level.cal)).toBe(false);
     expect(trunk(level.px, level.reps[0]!, level.cal, 'left').confidence).toBe('high');
+  });
+
+  it('detects a tilted camera when the far shoulder is not seen while standing', () => {
+    const { px, cal, reps, side } = setup({ tiltDeg: 15 });
+    for (const i of cal.standingFrames) px.frames[i]!.pts[R_SHOULDER] = null;
+    expect(isCameraTilted(px, cal)).toBe(false); // no side: no trunk line at all
+    expect(isCameraTilted(px, cal, side)).toBe(true);
+    expect(trunk(px, reps[0]!, cal, side).confidence).toBe('medium');
+    expect(depth(px, reps[0]!, cal, side).confidence).toBe('medium');
+  });
+
+  it('grades confidence on far-side joints when the midpoint trunk line uses them', () => {
+    const { px, cal, reps, side } = setup();
+    const b = reps[0]!.bottomFrame;
+    // far shoulder missing in 3 of 5 window frames: midpoint line is not trusted
+    for (const i of [b - 2, b - 1, b + 1]) px.frames[i]!.pts[R_SHOULDER] = null;
+    const m = trunk(px, reps[0]!, cal, side);
+    expect(m.value).not.toBeNull();
+    expect(m.confidence).toBe('high'); // camera-side fallback, all observed
+  });
+});
+
+describe('truthReps', () => {
+  it('normalizes depthNorm to the deepest rep and uses frame times', () => {
+    const reps = truthReps({ reps: 2, repDepthScale: [0.5, 0.8], descentS: 1.05 });
+    expect(reps[0]!.depthNorm).toBeCloseTo(0.625, 10);
+    expect(reps[1]!.depthNorm).toBe(1);
+    expect(reps[0]!.bottomT).toBeCloseTo((reps[0]!.bottomFrame * 1000) / 30, 10);
   });
 });

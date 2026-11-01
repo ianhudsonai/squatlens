@@ -6,9 +6,11 @@
  * - `standingTiltDeg` estimates camera roll from the standing trunk angle.
  */
 import { signedAngleToVerticalDeg } from '../geometry';
+import type { Px } from '../geometry';
+import { SIDE_JOINTS } from '../landmarks';
 import { hipMid, shoulderMid } from '../calibration';
 import type { PxTrack } from '../smoothing';
-import type { Calibration, Confidence, Rep } from '../types';
+import type { Calibration, Confidence, Rep, Side } from '../types';
 
 export const DEFAULTS = {
   /** Frames on each side of the bottom frame that are checked for visibility. */
@@ -100,18 +102,27 @@ function median(xs: number[]): number | null {
 }
 
 /**
- * Median signed trunk angle (hip-mid -> shoulder-mid vs image vertical) over the standing
- * frames, degrees; positive = shoulders toward image right. A standing lifter is close to
- * vertical, so a large value means the camera is rolled. Null when no standing frame has
- * both midpoints.
+ * Median signed trunk angle against the image vertical over the standing frames, degrees;
+ * positive = shoulders toward image right. Uses hip-mid -> shoulder-mid, or the `side`
+ * hip -> shoulder in frames where a far-side joint is not usable (common in lateral views).
+ * A standing lifter is close to vertical, so a large value means the camera is rolled.
+ * Null when no standing frame has a usable trunk line.
  */
-export function standingTiltDeg(track: PxTrack, calibration: Calibration): number | null {
+export function standingTiltDeg(
+  track: PxTrack,
+  calibration: Calibration,
+  side?: Side,
+): number | null {
   const angles: number[] = [];
   for (const i of calibration.standingFrames) {
     const f = track.frames[i];
     if (!f) continue;
-    const h = hipMid(f);
-    const s = shoulderMid(f);
+    let h: Px | null = hipMid(f);
+    let s: Px | null = shoulderMid(f);
+    if ((!h || !s) && side) {
+      h = f.pts[SIDE_JOINTS[side].hip] ?? null;
+      s = f.pts[SIDE_JOINTS[side].shoulder] ?? null;
+    }
     if (!h || !s) continue;
     const a = signedAngleToVerticalDeg(h, s);
     if (a !== null) angles.push(a);
@@ -123,9 +134,10 @@ export function standingTiltDeg(track: PxTrack, calibration: Calibration): numbe
 export function isCameraTilted(
   track: PxTrack,
   calibration: Calibration,
+  side?: Side,
   o: LateralOptions = DEFAULTS,
 ): boolean {
-  const tilt = standingTiltDeg(track, calibration);
+  const tilt = standingTiltDeg(track, calibration, side);
   return tilt !== null && Math.abs(tilt) > o.maxStandingTrunkDeg;
 }
 
@@ -133,4 +145,21 @@ export function isCameraTilted(
 export function capConfidence(c: Confidence, cap: Confidence): Confidence {
   const rank: Record<Confidence, number> = { low: 0, medium: 1, high: 2 };
   return rank[c] <= rank[cap] ? c : cap;
+}
+
+/**
+ * `bottomWindow` plus the tilted-camera cap shared by every lateral metric: confidence is
+ * at most medium when `isCameraTilted` (angles are measured against the image vertical).
+ */
+export function lateralConfidence(
+  track: PxTrack,
+  rep: Rep,
+  calibration: Calibration,
+  side: Side,
+  joints: readonly number[],
+  o: LateralOptions = DEFAULTS,
+): WindowCheck {
+  const win = bottomWindow(track, rep, joints, o);
+  if (!win.ok || !isCameraTilted(track, calibration, side, o)) return win;
+  return { ok: true, confidence: capConfidence(win.confidence, 'medium') };
 }

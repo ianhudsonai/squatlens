@@ -17,6 +17,10 @@ describe('classifyDepth', () => {
   it.each([
     [0.2, 'below'],
     [0.071, 'below'],
+    [0.07, 'borderline'],
+    [0.03, 'borderline'],
+    [-0.03, 'borderline'],
+    [-0.07, 'borderline'],
     [0.069, 'borderline'],
     [0.05, 'borderline'],
     [0.031, 'borderline'],

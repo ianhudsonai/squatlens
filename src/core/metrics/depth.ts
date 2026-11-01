@@ -24,13 +24,7 @@ import { kneeFlexDeg } from '../calibration';
 import { SIDE_JOINTS } from '../landmarks';
 import type { PxTrack } from '../smoothing';
 import type { Calibration, DepthClass, DepthResult, Metric, Rep, Side } from '../types';
-import {
-  DEFAULTS as LATERAL_DEFAULTS,
-  bottomWindow,
-  capConfidence,
-  isCameraTilted,
-  withDefaults,
-} from './lateral';
+import { DEFAULTS as LATERAL_DEFAULTS, lateralConfidence, withDefaults } from './lateral';
 import type { LateralOptions } from './lateral';
 
 export const DEFAULTS = {
@@ -50,7 +44,9 @@ export function classifyDepth(
   delta: number,
   o: Pick<DepthOptions, 'parallelBand' | 'borderlineBand'> = DEFAULTS,
 ): DepthClass {
-  if (Math.abs(Math.abs(delta) - o.parallelBand) <= o.borderlineBand) return 'borderline';
+  // Small epsilon so the documented edges (e.g. exactly 0.03 / 0.07) count as borderline
+  // despite floating-point error.
+  if (Math.abs(Math.abs(delta) - o.parallelBand) <= o.borderlineBand + 1e-9) return 'borderline';
   if (delta > o.parallelBand) return 'below';
   if (delta < -o.parallelBand) return 'above';
   return 'parallel';
@@ -70,7 +66,7 @@ export function depth(
   if (femur === null || !(femur > 0)) {
     return { value: null, confidence: null, reason: 'low_visibility' };
   }
-  const win = bottomWindow(track, rep, [j.hip, j.knee, j.ankle], o);
+  const win = lateralConfidence(track, rep, calibration, side, [j.hip, j.knee, j.ankle], o);
   if (!win.ok) return { value: null, confidence: null, reason: win.reason };
 
   const f = track.frames[rep.bottomFrame]!;
@@ -81,11 +77,8 @@ export function depth(
 
   const delta = (hip.y - knee.y) / femur;
   const thighAngleDeg = Math.atan2(knee.y - hip.y, Math.abs(knee.x - hip.x)) * RAD2DEG;
-  const confidence = isCameraTilted(track, calibration, o)
-    ? capConfidence(win.confidence, 'medium')
-    : win.confidence;
   return {
     value: { delta, cls: classifyDepth(delta, o), thighAngleDeg, kneeFlexDeg: flex },
-    confidence,
+    confidence: win.confidence,
   };
 }
