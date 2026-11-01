@@ -310,7 +310,7 @@ export function skeleton(progress: number, o: SquatOptions): { pos: V3[]; sideOf
 export function makeSquatTrack(opts: Partial<SquatOptions> = {}): PoseTrack {
   const o = resolveOptions(opts);
   const rng = makeRng(o.seed);
-  const n = Math.floor((clipDurationMs(o) / 1000) * o.fps) + 1;
+  const n = Math.floor((clipDurationMs(o) * o.fps) / 1000 + 1e-9) + 1;
   const drop = new Set(o.dropFrames);
 
   // Camera at (0, -D, h) looking along +Y; image right = +X, image down = -Z.
@@ -319,7 +319,7 @@ export function makeSquatTrack(opts: Partial<SquatOptions> = {}): PoseTrack {
   const f = (o.fill * o.height * D) / BODY.height;
   const cx = o.width / 2;
   // Vertically centre the standing body (feet at z=0, head at z=height).
-  const cy = o.height / 2 - (f * (BODY.height / 2 - camH)) / D;
+  const cy = o.height / 2 - (f * (camH - BODY.height / 2)) / D;
   const roll = o.tiltDeg * DEG;
   const cr = Math.cos(roll);
   const sr = Math.sin(roll);

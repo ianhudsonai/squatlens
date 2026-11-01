@@ -67,12 +67,18 @@ export type PreprocessOptions = Partial<Omit<SmoothingOptions, 'oneEuro'>> & {
   oneEuro?: Partial<OneEuroParams>;
 };
 
+/** `{...a, ...b}` that ignores keys of `b` explicitly set to undefined. */
+function merge<T extends object>(a: T, b: object | undefined): T {
+  const out = { ...a };
+  for (const [k, v] of Object.entries(b ?? {})) {
+    if (v !== undefined && k in a) (out as Record<string, unknown>)[k] = v;
+  }
+  return out;
+}
+
 function resolve(opts: PreprocessOptions | undefined): SmoothingOptions {
-  return {
-    ...DEFAULTS,
-    ...opts,
-    oneEuro: { ...DEFAULTS.oneEuro, ...opts?.oneEuro },
-  };
+  const { oneEuro, ...rest } = opts ?? {};
+  return { ...merge(DEFAULTS, rest), oneEuro: merge(DEFAULTS.oneEuro, oneEuro) };
 }
 
 /**

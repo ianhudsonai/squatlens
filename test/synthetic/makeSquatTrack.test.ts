@@ -142,3 +142,19 @@ describe('makeSquatTrack', () => {
     expect(tr.frames[0]!.lm!.some((l) => l.visibility < 0.5)).toBe(true);
   });
 });
+
+describe('camera placement', () => {
+  for (const cameraHeightM of [0.3, 0.9, 1.6]) {
+    it(`keeps the standing body in frame at camera height ${cameraHeightM} m`, () => {
+      const tr = makeSquatTrack({ view: 'frontal', cameraHeightM });
+      expect(tr.frames[0]!.lm!.every((l) => l.visibility > 0.5)).toBe(true);
+    });
+  }
+
+  it('ends with a frame at the clip end despite float rounding', () => {
+    const tr = makeSquatTrack({ reps: 3, fps: 30 });
+    const last = tr.frames[tr.frames.length - 1]!.t;
+    const end = repSchedule()[2]!.endT + 1000;
+    expect(end - last).toBeLessThan(1000 / 30);
+  });
+});

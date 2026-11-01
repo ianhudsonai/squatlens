@@ -91,3 +91,27 @@ describe('calibrate', () => {
     expect(calibrate(preprocess(track))).toBeNull();
   });
 });
+
+describe('calibrate robustness', () => {
+  it('keeps most frames of a nearly motionless clip', () => {
+    const px = preprocess(makeSquatTrack({ reps: 0, leadS: 3, tailS: 2, noise: 2 }));
+    const cal = calibrate(px)!;
+    // only the first 3 s are searched: expect most of those 91 frames
+    expect(cal.standingFrames.length).toBeGreaterThan(60);
+  });
+
+  it('ignores a single glitch frame high above the real standing hip', () => {
+    const track = makeSquatTrack({ view: 'lateral' });
+    const g = track.frames[60]!.lm!;
+    for (const k of [L_HIP, R_HIP]) g[k] = { ...g[k]!, y: g[k]!.y - 0.1 };
+    const cal = calibrate(preprocess(track))!;
+    expect(cal.standingFrames.length).toBeGreaterThan(15);
+    const clean = calibrate(preprocess(makeSquatTrack({ view: 'lateral' })))!;
+    expect(Math.abs(cal.standingHipY - clean.standingHipY)).toBeLessThan(2);
+  });
+
+  it('treats options explicitly set to undefined as defaults', () => {
+    const px = preprocess(makeSquatTrack({ view: 'lateral' }), { maxGapFrames: undefined });
+    expect(calibrate(px, { windowS: undefined })).toEqual(calibrate(px));
+  });
+});
