@@ -24,6 +24,7 @@ export default defineConfig({
   webServer: {
     command: `npx vite preview --port ${PORT} --strictPort`,
     url: `http://localhost:${PORT}/squatlens/`,
-    reuseExistingServer: !process.env.CI,
+    // Never test whatever happens to be on the port: it may be an older build.
+    reuseExistingServer: false,
   },
 });

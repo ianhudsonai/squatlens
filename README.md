@@ -84,7 +84,7 @@ open the chest. A long femur or a low-bar squat can make that normal, so treat i
 
 ### Knee cave (front view)
 
-For each leg, the frontal knee angle (hip, knee, ankle) through the bottom half of the rep,
+For each leg, the frontal knee angle (hip, knee, ankle) from the point where you are 30% of the way down to the bottom and back up,
 compared with your standing angle, plus how the distance between the knees changes relative
 to the distance between the ankles. An alert fires when either knee angle moves inward by
 more than 10°, or the knees close in by more than 20% relative to the ankles.
