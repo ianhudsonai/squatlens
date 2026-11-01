@@ -118,6 +118,38 @@ describe('assessQuality', () => {
     expect(q.ok).toBe(false);
   });
 
+  describe('frame-rate threshold is not tripped by rounding', () => {
+    /** Rounds every timestamp to integer ms, as extractFrames does (SPEC §4). */
+    const intMs = (track: PoseTrack): PoseTrack => ({
+      ...track,
+      frames: track.frames.map((f) => ({ ...f, t: Math.round(f.t) })),
+    });
+
+    for (const fps of [15, 30, 24, 29.97]) {
+      it(`passes a clip sampled exactly at the threshold (${fps} Hz, integer ms)`, () => {
+        const track = intMs(makeSquatTrack({ view: 'lateral', fps }));
+        const px = preprocess(track);
+        const cal = calibrate(px);
+        const q = assessQuality(px, detectView(px, cal), cal, { minEffectiveFps: fps });
+        expect(q.effectiveFps).toBeCloseTo(fps, 2);
+        expect(q.problems).not.toContain('low_fps');
+        expect(q.ok).toBe(true);
+      });
+    }
+
+    it('passes the default 15 fps gate at exactly 15 Hz with integer-ms timestamps', () => {
+      const { q } = run(intMs(makeSquatTrack({ view: 'lateral', fps: 15 })));
+      expect(q.problems).toEqual([]);
+      expect(q.ok).toBe(true);
+    });
+
+    it('still fails a clip genuinely below the threshold', () => {
+      const { q } = run(intMs(makeSquatTrack({ view: 'lateral', fps: 14.8 })));
+      expect(q.problems).toEqual(['low_fps']);
+      expect(q.ok).toBe(false);
+    });
+  });
+
   it('flags cut-off feet', () => {
     const { q } = run(shiftY(makeSquatTrack({ view: 'frontal' }), 0.2));
     expect(q.cutOff).toBe(true);
