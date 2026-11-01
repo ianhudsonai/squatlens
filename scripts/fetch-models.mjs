@@ -18,7 +18,8 @@ const WASM_SRC = join(ROOT, 'node_modules', '@mediapipe', 'tasks-vision', 'wasm'
 
 // Versioned URLs (`/float16/1/`) so the bytes never change under us. Hashes recorded on
 // 2026-11-01. If Google ever republishes a version, the hash check fails loudly instead
-// of silently shipping a different model.
+// of silently shipping a different model. When the hashes change, also bump CACHE_NAME in
+// src/pose/modelCache.ts so returning visitors drop the old model from Cache Storage.
 const MODELS = {
   lite: '59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a',
   full: '5134a3aad27a58b93da0088d431f366da362b44e3ccfbe3462b3827a839011b1',
@@ -105,6 +106,7 @@ function parseArgs(argv) {
   const i = argv.indexOf('--models');
   if (i === -1) return Object.keys(MODELS);
   const list = (argv[i + 1] ?? '').split(',').filter(Boolean);
+  if (list.length === 0) throw new Error('--models needs a list, e.g. --models lite,full');
   for (const v of list) {
     if (!(v in MODELS)) throw new Error(`Unknown model "${v}" (expected lite, full or heavy)`);
   }

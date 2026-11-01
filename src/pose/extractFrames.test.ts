@@ -91,3 +91,33 @@ describe('extractFromSource', () => {
     expect(seeks).toEqual([]);
   });
 });
+
+describe('extractFromSource sampleHz', () => {
+  it('records the effective (capped) rate in the track', async () => {
+    const { source } = mockSource(1);
+    const track = await extractFromSource(
+      source,
+      { detectForVideo: () => pose },
+      { nativeFps: 24 },
+    );
+    expect(track.sampleHz).toBe(24);
+    expect(track.frames).toHaveLength(24);
+  });
+
+  it('passes the abort signal to seek', async () => {
+    const controller = new AbortController();
+    const signals: (AbortSignal | undefined)[] = [];
+    const source: FrameSource = {
+      ...mockSource(0.2).source,
+      seek: async (_t, signal) => {
+        signals.push(signal);
+      },
+    };
+    await extractFromSource(
+      source,
+      { detectForVideo: () => pose },
+      { sampleHz: 10, signal: controller.signal },
+    );
+    expect(signals).toEqual([controller.signal, controller.signal]);
+  });
+});

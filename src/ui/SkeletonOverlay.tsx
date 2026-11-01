@@ -27,11 +27,9 @@ export function SkeletonOverlay({ videoRef, track, connections }: Props) {
     canvas.width = track.width;
     canvas.height = track.height;
     const lineWidth = Math.max(2, Math.round(Math.min(track.width, track.height) / 200));
-    let raf = 0;
     let lastIndex = -2;
 
     const draw = () => {
-      raf = requestAnimationFrame(draw);
       const video = videoRef.current;
       if (!video) return;
       const index = nearestFrameIndex(track.frames, video.currentTime * 1000);
@@ -61,8 +59,36 @@ export function SkeletonOverlay({ videoRef, track, connections }: Props) {
         ctx.fill();
       }
     };
-    raf = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(raf);
+
+    // Redraw on every animation frame only while playing; seeks and pauses redraw once.
+    const video = videoRef.current;
+    if (!video) return;
+    let raf = 0;
+    const tick = () => {
+      draw();
+      raf = requestAnimationFrame(tick);
+    };
+    const onPlay = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(tick);
+    };
+    const onStop = () => {
+      cancelAnimationFrame(raf);
+      draw();
+    };
+    const stopEvents = ['pause', 'ended'] as const;
+    const redrawEvents = ['seeked', 'loadeddata', 'timeupdate'] as const;
+    video.addEventListener('play', onPlay);
+    for (const e of stopEvents) video.addEventListener(e, onStop);
+    for (const e of redrawEvents) video.addEventListener(e, draw);
+    if (video.paused) draw();
+    else onPlay();
+    return () => {
+      cancelAnimationFrame(raf);
+      video.removeEventListener('play', onPlay);
+      for (const e of stopEvents) video.removeEventListener(e, onStop);
+      for (const e of redrawEvents) video.removeEventListener(e, draw);
+    };
   }, [videoRef, track, connections]);
 
   return <canvas ref={canvasRef} className="skeleton-overlay" aria-hidden="true" />;

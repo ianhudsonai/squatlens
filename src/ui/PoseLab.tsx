@@ -80,13 +80,13 @@ export function PoseLab() {
       const pose = await import('../pose');
       const created = await pose.createLandmarker({
         model,
+        signal: controller.signal,
         onModelProgress: (p) => {
           if (!controller.signal.aborted)
             setStatus({ kind: 'model', loaded: p.loaded, total: p.total });
         },
       });
       landmarker = created.landmarker;
-      if (controller.signal.aborted) return;
       setStatus({ kind: 'starting' });
       const track = await pose.extractPoseTrack(file, created.landmarker, {
         signal: controller.signal,

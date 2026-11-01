@@ -32,27 +32,19 @@ function loadFileset() {
   return filesetPromise;
 }
 
-const modelBytes = new Map<ModelVariant, Promise<Uint8Array<ArrayBuffer>>>();
+function abortError(signal: AbortSignal): unknown {
+  return signal.reason ?? new DOMException('Aborted', 'AbortError');
+}
 
-/** Download (or read from cache) a model once per page load. */
+/**
+ * Download a model, or read it from Cache Storage on later visits. Bytes are not kept in
+ * memory between clips (they are 6-31 MB): a re-read from Cache Storage is cheap.
+ */
 export function loadModel(
   model: ModelVariant,
-  onProgress?: (p: FetchProgress) => void,
+  opts: { onProgress?: (p: FetchProgress) => void; signal?: AbortSignal } = {},
 ): Promise<Uint8Array<ArrayBuffer>> {
-  let p = modelBytes.get(model);
-  if (!p) {
-    p = fetchModel(modelUrl(model), { onProgress }).catch((err: unknown) => {
-      modelBytes.delete(model);
-      throw err;
-    });
-    modelBytes.set(model, p);
-  } else if (onProgress) {
-    // Already loaded or loading: report completion once it resolves.
-    void p
-      .then((b) => onProgress({ loaded: b.length, total: b.length, fromCache: true }))
-      .catch(() => {});
-  }
-  return p;
+  return fetchModel(modelUrl(model), opts);
 }
 
 export interface CreateLandmarkerOptions {
@@ -60,6 +52,8 @@ export interface CreateLandmarkerOptions {
   /** Preferred delegate; defaults to the URL override, else GPU. */
   delegate?: Delegate;
   onModelProgress?: (p: FetchProgress) => void;
+  /** Cancels the model download; a landmarker created after abort is closed. */
+  signal?: AbortSignal;
 }
 
 export interface CreatedLandmarker {
@@ -71,11 +65,28 @@ export interface CreatedLandmarker {
 async function createWith(bytes: Uint8Array, delegate: Delegate): Promise<PoseLandmarker> {
   const fileset = await loadFileset();
   return PoseLandmarker.createFromOptions(fileset, {
-    // Copy: the task may take ownership of the buffer, and we reuse it per clip.
-    baseOptions: { modelAssetBuffer: bytes.slice(), delegate },
+    baseOptions: { modelAssetBuffer: bytes, delegate },
     runningMode: 'VIDEO',
     numPoses: 1,
   });
+}
+
+async function createWithFallback(
+  opts: CreateLandmarkerOptions,
+): Promise<{ landmarker: PoseLandmarker; delegate: Delegate }> {
+  const { model, signal } = opts;
+  const bytes = await loadModel(model, { onProgress: opts.onModelProgress, signal });
+  const preferred = opts.delegate ?? delegateOverride() ?? 'GPU';
+  if (preferred === 'CPU') return { landmarker: await createWith(bytes, 'CPU'), delegate: 'CPU' };
+  try {
+    return { landmarker: await createWith(bytes, 'GPU'), delegate: 'GPU' };
+  } catch (err) {
+    console.warn('GPU delegate unavailable, falling back to CPU.', err);
+    if (signal?.aborted) throw abortError(signal);
+    // The failed attempt may have taken ownership of (detached) the buffer.
+    const retry = bytes.byteLength > 0 ? bytes : await loadModel(model, { signal });
+    return { landmarker: await createWith(retry, 'CPU'), delegate: 'CPU' };
+  }
 }
 
 /**
@@ -83,15 +94,10 @@ async function createWith(bytes: Uint8Array, delegate: Delegate): Promise<PoseLa
  * Tries GPU, falls back to CPU unless CPU was requested explicitly.
  */
 export async function createLandmarker(opts: CreateLandmarkerOptions): Promise<CreatedLandmarker> {
-  const bytes = await loadModel(opts.model, opts.onModelProgress);
-  const preferred = opts.delegate ?? delegateOverride() ?? 'GPU';
-  if (preferred === 'CPU') {
-    return { landmarker: await createWith(bytes, 'CPU'), model: opts.model, delegate: 'CPU' };
+  const { landmarker, delegate } = await createWithFallback(opts);
+  if (opts.signal?.aborted) {
+    landmarker.close();
+    throw abortError(opts.signal);
   }
-  try {
-    return { landmarker: await createWith(bytes, 'GPU'), model: opts.model, delegate: 'GPU' };
-  } catch (err) {
-    console.warn('GPU delegate unavailable, falling back to CPU.', err);
-    return { landmarker: await createWith(bytes, 'CPU'), model: opts.model, delegate: 'CPU' };
-  }
+  return { landmarker, model: opts.model, delegate };
 }

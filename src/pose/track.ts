@@ -19,6 +19,13 @@ export interface RawPoseResult {
   worldLandmarks: RawLandmark[][];
 }
 
+/** `min(sampleHz, nativeFps)` when the native rate is known, else `sampleHz`. */
+export function effectiveSampleHz(sampleHz: number, nativeFps?: number): number {
+  return nativeFps !== undefined && Number.isFinite(nativeFps) && nativeFps > 0
+    ? Math.min(sampleHz, nativeFps)
+    : sampleHz;
+}
+
 /**
  * Sample times in seconds: 0, 1/hz, 2/hz, ... strictly below `durationS`.
  * The effective rate is `min(sampleHz, nativeFps)` when the native rate is known, so we
@@ -29,10 +36,7 @@ export function sampleTimes(durationS: number, sampleHz: number, nativeFps?: num
   if (!Number.isFinite(sampleHz) || sampleHz <= 0) {
     throw new RangeError(`sampleHz must be a positive number, got ${sampleHz}`);
   }
-  const hz =
-    nativeFps && Number.isFinite(nativeFps) && nativeFps > 0
-      ? Math.min(sampleHz, nativeFps)
-      : sampleHz;
+  const hz = effectiveSampleHz(sampleHz, nativeFps);
   const count = Math.ceil(durationS * hz - 1e-9);
   const out: number[] = [];
   for (let i = 0; i < count; i++) out.push(i / hz);

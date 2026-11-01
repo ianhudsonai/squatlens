@@ -3,7 +3,14 @@
  * sampled frame and assembles a PoseTrack (SPEC §4).
  */
 import type { PoseFrame, PoseTrack } from '../core/types';
-import { buildTrack, sampleTimes, toPoseFrame, toTimestampsMs, type RawPoseResult } from './track';
+import {
+  buildTrack,
+  effectiveSampleHz,
+  sampleTimes,
+  toPoseFrame,
+  toTimestampsMs,
+  type RawPoseResult,
+} from './track';
 
 /** What extraction needs from a landmarker. PoseLandmarker satisfies it. */
 export interface VideoPoseDetector {
@@ -17,7 +24,8 @@ export interface FrameSource {
   readonly durationS: number;
   /** The element handed to the detector; must show the frame at the last seek. */
   readonly element: HTMLVideoElement;
-  seek(timeS: number): Promise<void>;
+  /** Resolve once the frame at `timeS` is shown; reject promptly when `signal` aborts. */
+  seek(timeS: number, signal?: AbortSignal): Promise<void>;
 }
 
 export interface ExtractOptions {
@@ -49,7 +57,7 @@ export async function extractFromSource(
   opts.onProgress?.(0, times.length);
   for (let i = 0; i < times.length; i++) {
     if (opts.signal?.aborted) throw abortError(opts.signal);
-    await source.seek(times[i]!);
+    await source.seek(times[i]!, opts.signal);
     if (opts.signal?.aborted) throw abortError(opts.signal);
     const t = stamps[i]!;
     const result = detector.detectForVideo(source.element, t);
@@ -59,7 +67,8 @@ export async function extractFromSource(
   return buildTrack({
     width: source.width,
     height: source.height,
-    sampleHz,
+    // The rate actually sampled (capped by nativeFps), so frame spacing matches.
+    sampleHz: effectiveSampleHz(sampleHz, opts.nativeFps),
     frames,
     meta: opts.meta,
   });
@@ -67,8 +76,17 @@ export async function extractFromSource(
 
 const SEEK_TIMEOUT_MS = 10_000;
 
-function once(target: EventTarget, okEvent: string, timeoutMs: number): Promise<void> {
+function once(
+  target: EventTarget,
+  okEvent: string,
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<void> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortError(signal));
+      return;
+    }
     const timer = setTimeout(() => {
       cleanup();
       reject(new Error(`Timed out waiting for video "${okEvent}"`));
@@ -81,13 +99,19 @@ function once(target: EventTarget, okEvent: string, timeoutMs: number): Promise<
       cleanup();
       reject(new Error('Could not decode this video in the browser.'));
     };
+    const onAbort = () => {
+      cleanup();
+      reject(abortError(signal!));
+    };
     const cleanup = () => {
       clearTimeout(timer);
       target.removeEventListener(okEvent, onOk);
       target.removeEventListener('error', onErr);
+      signal?.removeEventListener('abort', onAbort);
     };
     target.addEventListener(okEvent, onOk);
     target.addEventListener('error', onErr);
+    signal?.addEventListener('abort', onAbort);
   });
 }
 
@@ -130,10 +154,10 @@ export async function openVideoSource(
       height: video.videoHeight,
       durationS,
       element: video,
-      async seek(timeS: number) {
+      async seek(timeS: number, signal?: AbortSignal) {
         // Setting currentTime to its current value fires no `seeked` event.
         if (Math.abs(current - timeS) < 1e-6 && video.readyState >= 2) return;
-        const seeked = once(video, 'seeked', SEEK_TIMEOUT_MS);
+        const seeked = once(video, 'seeked', SEEK_TIMEOUT_MS, signal);
         video.currentTime = timeS;
         await seeked;
         current = timeS;

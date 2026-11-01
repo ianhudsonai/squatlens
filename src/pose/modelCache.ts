@@ -1,10 +1,21 @@
 /**
  * Fetches model files through Cache Storage so a second visit works offline (SPEC §4).
  * Models are same-origin static files; the cache key is their URL, and the cache name is
- * versioned so a model bump only needs a new CACHE_NAME.
+ * versioned: bump CACHE_NAME whenever the pinned hashes in scripts/fetch-models.mjs change,
+ * otherwise returning visitors keep the old bytes.
  */
 
 export const CACHE_NAME = 'squatlens-models-v1';
+
+/** Drop caches left by older CACHE_NAMEs (best effort). */
+async function pruneOldCaches(): Promise<void> {
+  const names = await caches.keys();
+  await Promise.all(
+    names
+      .filter((n) => n.startsWith('squatlens-models-') && n !== CACHE_NAME)
+      .map((n) => caches.delete(n)),
+  );
+}
 
 export interface FetchProgress {
   loaded: number;
@@ -22,6 +33,7 @@ async function openCache(): Promise<Cache | null> {
   // Cache Storage only exists in secure contexts (https or localhost).
   if (typeof caches === 'undefined') return null;
   try {
+    void pruneOldCaches().catch(() => {});
     return await caches.open(CACHE_NAME);
   } catch {
     return null;
