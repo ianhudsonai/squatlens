@@ -15,6 +15,8 @@ export const en: CueMessages = {
     'view.diagonal': 'Camera at a diagonal: film from the side (depth) or the front (knees).',
     'view.unknown':
       "Couldn't tell the camera angle: film from the side (depth) or the front (knees).",
+    'view.no_side':
+      "Couldn't tell which side of your body faces the camera: film straight from the side, whole body visible.",
     'nodata.reps': 'No complete rep detected.',
     'nodata.depth': 'Not enough data for depth.',
     'nodata.trunk': 'Not enough data for the trunk.',
@@ -30,7 +32,7 @@ export const en: CueMessages = {
       'Your knees tended to cave in ({conf} confidence): think about pushing the floor apart.',
     'asym.shift': 'Your hips shifted to the {side} at the bottom.',
     'asym.uneven': 'Your two sides were uneven at the bottom: one side sank more than the other.',
-    'tempo.fast_descent': 'Fast descent: try to control it more.',
+    'tempo.fast_descent': 'Fast descent ({d} s): try to control it more.',
     'tempo.summary': 'Down in {d} s and up in {a} s.',
     'fatigue.loss': 'Your ascent speed dropped {pct}% from the first to the last rep.',
   },

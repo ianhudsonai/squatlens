@@ -15,6 +15,8 @@ export const ptBR: CueMessages = {
     'view.diagonal': 'Câmera na diagonal: filme de lado (profundidade) ou de frente (joelhos).',
     'view.unknown':
       'Não deu para identificar o ângulo da câmera: filme de lado (profundidade) ou de frente (joelhos).',
+    'view.no_side':
+      'Não deu para saber qual lado do corpo está virado para a câmera: filme bem de lado, com o corpo todo visível.',
     'nodata.reps': 'Nenhuma repetição completa detectada.',
     'nodata.depth': 'Sem dados suficientes para profundidade.',
     'nodata.trunk': 'Sem dados suficientes para o tronco.',
@@ -30,7 +32,7 @@ export const ptBR: CueMessages = {
       'Seus joelhos tenderam a entrar (confiança {conf}): pense em empurrar o chão para fora.',
     'asym.shift': 'O quadril desviou para a {side} no fundo.',
     'asym.uneven': 'Os dois lados ficaram desiguais no fundo: um lado desceu mais que o outro.',
-    'tempo.fast_descent': 'Descida rápida: tente controlar mais.',
+    'tempo.fast_descent': 'Descida rápida ({d} s): tente controlar mais.',
     'tempo.summary': 'Descida em {d} s e subida em {a} s.',
     'fatigue.loss': 'A velocidade de subida caiu {pct}% da primeira para a última rep.',
   },

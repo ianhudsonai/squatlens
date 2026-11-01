@@ -23,7 +23,8 @@ function formatParam(key: string, v: number | string, m: CueMessages): string {
  * itself; a placeholder with no matching param is left as is.
  */
 export function renderCue(cue: Cue, lang: Lang): string {
-  const m = MESSAGES[lang];
+  // A stale or unsupported language (e.g. from localStorage) falls back to pt-BR.
+  const m = Object.hasOwn(MESSAGES, lang) ? MESSAGES[lang] : MESSAGES['pt-BR'];
   if (!Object.hasOwn(m.cues, cue.id)) return cue.id;
   const template = (m.cues as Record<string, string>)[cue.id]!;
   return template.replace(/\{(\w+)\}/g, (whole, key: string) =>

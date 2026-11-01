@@ -105,6 +105,11 @@ describe('analyzeSet', () => {
   it('passes per-stage options through, including the thresholds the cues reuse', () => {
     const r = run({ view: 'lateral' }, { trunk: { forwardLeanHintDeg: 5 } });
     expect(ids(r)).toContain('trunk.forward');
+    const r1 = run(
+      { view: 'lateral' },
+      { trunk: { forwardLeanHintDeg: 5 }, cues: { forwardLeanDeg: undefined } },
+    );
+    expect(ids(r1)).toContain('trunk.forward');
     const r2 = run({ view: 'lateral' }, { cues: { fastDescentS: 5 } });
     expect(ids(r2)).toContain('tempo.fast_descent');
     const r3 = run({ view: 'lateral' }, { reps: { minBottom: 2 } });

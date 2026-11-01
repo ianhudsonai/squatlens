@@ -110,6 +110,38 @@ describe('generateCues', () => {
     );
   });
 
+  it('no fatigue.loss when the loss has low confidence', () => {
+    const reps = [rep(0, { tempo: tempo(1, 1) }), rep(1, { tempo: tempo(1, 1) })];
+    const r = report({ reps, velocityLoss: { value: 0.4, confidence: 'low' } });
+    expect(generateCues(r).map((c) => c.id)).toEqual(['tempo.summary']);
+  });
+
+  it('no pose: no extra view.unknown cue; lateral without a side: view.no_side once', () => {
+    const unknown = {
+      view: 'unknown',
+      side: null,
+      ratio2d: null,
+      yawDeg: null,
+      confidence: null,
+    } as const;
+    const noPose = { ...okQuality, ok: false, problems: ['no_pose' as const] };
+    expect(ids(report({ view: unknown, quality: noPose }))).toEqual(['quality.no_pose']);
+    const lateral = {
+      view: 'lateral',
+      side: null,
+      ratio2d: 0.1,
+      yawDeg: 80,
+      confidence: 'low',
+    } as const;
+    const lowVis: Metric<never> = { value: null, confidence: null, reason: 'low_visibility' };
+    const reps = [0, 1].map((i) => rep(i, { depth: lowVis }));
+    expect(ids(report({ view: lateral, reps }))).toEqual([
+      'view.no_side',
+      'nodata.depth',
+      'nodata.depth',
+    ]);
+  });
+
   it('respects option overrides', () => {
     const r = report({ reps: [rep(0, { tempo: tempo(0.8, 1) })] });
     expect(generateCues(r).map((c) => c.id)).not.toContain('tempo.fast_descent');
@@ -160,6 +192,7 @@ describe('translations', () => {
       params,
     });
     expect(renderCue(c('future.cue'), 'en')).toBe('future.cue');
+    expect(renderCue(c('depth.above'), 'en-US' as never)).toBe('Quase lá: desça mais um pouco.');
     expect(renderCue(c('toString'), 'en')).toBe('toString');
     expect(renderCue(c('tempo.summary', { d: 1 }), 'en')).toBe('Down in 1 s and up in {a} s.');
     expect(renderCue(c('valgus.flag', { conf: 'toString' }), 'en')).toContain('(toString');

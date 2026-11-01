@@ -4,7 +4,8 @@
  *
  * Order, so the list reads top-down the same way every time:
  *   1. one cue per `quality.problems` entry, in that order (`diagonal_view` -> `view.diagonal`,
- *      the refilm cue), then `view.unknown` when the view could not be classified;
+ *      the refilm cue), then `view.unknown` when the view could not be classified (unless no
+ *      pose was found), and `view.no_side` in a lateral view with no camera side;
  *   2. if `quality.ok` is false, stop here: the UI shows problems and no metrics;
  *   3. `nodata.reps` when no rep was found, and stop;
  *   4. per rep, in rep order: depth, trunk, tempo, valgus, asymmetry. A metric the view
@@ -27,7 +28,10 @@ export const DEFAULTS = {
   hipShiftFlag: ASYMMETRY_DEFAULTS.hipShiftFlag,
   /** descentS below this gives `tempo.fast_descent`. Uncalibrated guess. */
   fastDescentS: 0.5,
-  /** velocityLoss at or above this gives `fatigue.loss` (20% is a common VBT stop point). */
+  /**
+   * velocityLoss at or above this gives `fatigue.loss` (20% is a common VBT stop point).
+   * Low-confidence losses give no cue.
+   */
   fatigueLoss: 0.2,
 };
 
@@ -46,6 +50,7 @@ export const CUE_IDS = [
   'quality.tilted_camera',
   'view.diagonal',
   'view.unknown',
+  'view.no_side',
   'nodata.reps',
   ...CUE_METRICS.map((m) => `nodata.${m}` as const),
   'depth.below',
@@ -138,8 +143,13 @@ export function generateCues(
 ): Cue[] {
   const o = withDefaults(DEFAULTS, opts);
   const cues: Cue[] = report.quality.problems.map(problemCue);
-  if (report.view.view === 'unknown') {
+  // With no pose at all, quality.no_pose already says why the view is unknown.
+  if (report.view.view === 'unknown' && !report.quality.problems.includes('no_pose')) {
     cues.push({ id: 'view.unknown', repIndex: null, severity: 'warn', params: {} });
+  }
+  // Lateral metrics need the camera side; say why depth/trunk are missing once.
+  if (report.view.view === 'lateral' && report.view.side === null) {
+    cues.push({ id: 'view.no_side', repIndex: null, severity: 'warn', params: {} });
   }
   if (!report.quality.ok) return cues;
   if (report.reps.length === 0) {
@@ -162,7 +172,7 @@ export function generateCues(
     });
   }
   const loss = report.velocityLoss.value;
-  if (loss !== null && loss >= o.fatigueLoss) {
+  if (loss !== null && loss >= o.fatigueLoss && report.velocityLoss.confidence !== 'low') {
     cues.push({
       id: 'fatigue.loss',
       repIndex: null,

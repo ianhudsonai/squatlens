@@ -8,7 +8,6 @@ export { analyzeSet } from './analyze';
 export type { AnalyzeOptions } from './analyze';
 export * from './cues';
 
-export { withDefaults } from './options';
 export { DEFAULTS as GEOMETRY_DEFAULTS, toPx, usable } from './geometry';
 export type { Px, UsableOptions } from './geometry';
 export { DEFAULTS as SMOOTHING_DEFAULTS, preprocess } from './smoothing';

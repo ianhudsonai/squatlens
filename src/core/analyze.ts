@@ -104,10 +104,11 @@ export function analyzeSet(track: PoseTrack, opts: AnalyzeOptions = {}): SetRepo
     cues: [],
   };
   // The trunk and asymmetry thresholds the cues reuse follow those modules' overrides.
+  // An explicit `cues` value wins; an undefined one does not erase the module override.
   report.cues = generateCues(report, {
-    forwardLeanDeg: opts.trunk?.forwardLeanHintDeg,
-    hipShiftFlag: opts.asymmetry?.hipShiftFlag,
     ...opts.cues,
+    forwardLeanDeg: opts.cues?.forwardLeanDeg ?? opts.trunk?.forwardLeanHintDeg,
+    hipShiftFlag: opts.cues?.hipShiftFlag ?? opts.asymmetry?.hipShiftFlag,
   });
   return report;
 }

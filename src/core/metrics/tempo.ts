@@ -138,7 +138,7 @@ const CONF_RANK: Record<Confidence, number> = { low: 0, medium: 1, high: 2 };
  * `ascentHipVel` (hip speed, not bar speed). Strictly the set's first and last reps: if either
  * has no tempo the result is null with that rep's reason, rather than silently comparing other
  * reps. Null with `no_reps` for an empty set and `insufficient_frames` for a single rep or a
- * non-positive first speed. Confidence is the lower of the two reps' confidences.
+ * non-positive first or last speed. Confidence is the lower of the two reps' confidences.
  */
 export function velocityLoss(tempos: ReadonlyArray<Metric<TempoResult>>): Metric<number> {
   if (tempos.length === 0) return { value: null, confidence: null, reason: 'no_reps' };
@@ -150,7 +150,8 @@ export function velocityLoss(tempos: ReadonlyArray<Metric<TempoResult>>): Metric
       return { value: null, confidence: null, reason: m.reason ?? 'insufficient_frames' };
     }
   }
-  if (!(first.value!.ascentHipVel > 0)) {
+  // A non-positive speed (no net rise, or a zero-length ascent) is not a measurement.
+  if (!(first.value!.ascentHipVel > 0) || !(last.value!.ascentHipVel > 0)) {
     return { value: null, confidence: null, reason: 'insufficient_frames' };
   }
   const c1 = first.confidence ?? 'low';
