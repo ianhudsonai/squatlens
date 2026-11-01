@@ -9,7 +9,7 @@
  *     diagonal / unknown -> at least one hip (tempo only).
  *   In lateral view with no known camera side, either side's chain satisfies the frame.
  * - `effectiveFps`: frames counted in `visibleFrac` / clip duration (s). The duration includes
- *   one median frame interval, so a fully visible clip sampled at N Hz scores N.
+ *   one mean frame interval, so a fully visible clip sampled at N Hz scores N.
  * - `cutOff`: in more than `cutOffMaxFrac` of the frames that contain a pose, the nose or a
  *   foot is outside the image or not usable. A foot counts as present when its ankle or its
  *   heel is usable and inside the image, so a heel hidden behind the foot is not a cut-off.
@@ -23,7 +23,8 @@
  *   likely means the camera is rolled; a lifter leaning forward while standing can also trip
  *   it, which is why it only warns. No standing frames -> false (squat frames would read the
  *   squat's own trunk lean as tilt). Does not block `ok`.
- * - `ok = visibleFrac >= minVisibleFrac && effectiveFps >= minEffectiveFps && !cutOff &&
+ * - `ok = visibleFrac >= minVisibleFrac && effectiveFps >= minEffectiveFps (minus
+ *   `FPS_REL_TOLERANCE` for rounding) && !cutOff &&
  *   pose found`. `diagonal_view` and `tilted_camera` are reported but do not block.
  *
  * Every threshold is an uncalibrated starting guess until validated on real clips (SPEC §10).
@@ -45,6 +46,9 @@ export const DEFAULTS = {
   /** tiltedCamera when |standing trunk angle| exceeds this, degrees. Uncalibrated guess. */
   maxStandingTrunkDeg: 10,
 };
+
+/** effectiveFps may fall this fraction below minEffectiveFps and still pass (rounding only). */
+export const FPS_REL_TOLERANCE = 1e-3;
 
 export type QualityOptions = typeof DEFAULTS;
 
@@ -112,9 +116,14 @@ export function assessQuality(
 
   let effectiveFps = 0;
   if (n > 0) {
-    const dts: number[] = [];
-    for (let i = 1; i < n; i++) dts.push(frames[i]!.t - frames[i - 1]!.t);
-    const frameDt = median(dts) ?? (track.sampleHz > 0 ? 1000 / track.sampleHz : 0);
+    // Mean interval, not median: timestamps are integer ms (SPEC §4), so at 15 Hz every
+    // interval is 66 or 67 ms and the median overstates the true 66.67 ms.
+    const frameDt =
+      n > 1
+        ? (frames[n - 1]!.t - frames[0]!.t) / (n - 1)
+        : track.sampleHz > 0
+          ? 1000 / track.sampleHz
+          : 0;
     const durationS = (frames[n - 1]!.t - frames[0]!.t + frameDt) / 1000;
     effectiveFps = durationS > 0 ? visibleCount / durationS : 0;
   }
@@ -147,13 +156,15 @@ export function assessQuality(
   const problems: Problem[] = [];
   if (!poseFound) problems.push('no_pose');
   if (visibleFrac < o.minVisibleFrac) problems.push('low_visibility');
-  if (effectiveFps < o.minEffectiveFps) problems.push('low_fps');
+  // Relative slack so float/integer-ms rounding never fails a clip sampled exactly at the
+  // threshold (15 Hz -> 14.9993 fps after rounding).
+  const fpsOk = effectiveFps >= o.minEffectiveFps * (1 - FPS_REL_TOLERANCE);
+  if (!fpsOk) problems.push('low_fps');
   if (cutOff) problems.push('cut_off');
   if (view.view === 'diagonal') problems.push('diagonal_view');
   if (tiltedCamera) problems.push('tilted_camera');
 
-  const ok =
-    poseFound && visibleFrac >= o.minVisibleFrac && effectiveFps >= o.minEffectiveFps && !cutOff;
+  const ok = poseFound && visibleFrac >= o.minVisibleFrac && fpsOk && !cutOff;
 
   return { ok, visibleFrac, effectiveFps, cutOff, tiltedCamera, problems };
 }
