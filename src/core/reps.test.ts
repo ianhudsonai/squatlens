@@ -215,6 +215,38 @@ describe('segmentReps state machine', () => {
     expect(reps[0]!.endFrame).toBeGreaterThanOrEqual(58);
   });
 
+  it('keeps an unrack or re-rack seconds away out of the rep boundaries', () => {
+    // Hip briefly 0.08 above standing at the start and end (unrack / toes), 3 s from the rep.
+    const d = [
+      ...Array<number>(5).fill(-0.08),
+      ...Array<number>(90).fill(0),
+      ...ramp(0, 1, 20),
+      ...ramp(1, 0, 20),
+      ...Array<number>(90).fill(0),
+      ...Array<number>(5).fill(-0.08),
+    ];
+    const { px, cal } = fromDepth(d);
+    const reps = segmentReps(px, cal);
+    expect(reps).toHaveLength(1);
+    expect(reps[0]!.startFrame).toBe(94);
+    expect(reps[0]!.endFrame).toBe(134);
+  });
+
+  it('applies a time floor to the debounce at high frame rates', () => {
+    // 120 fps: 6 frames (50 ms) below exit is a frame-count debounce but not a time one.
+    const d = [
+      ...Array<number>(120).fill(0),
+      ...ramp(0, 1, 80),
+      ...ramp(1, 0.05, 80),
+      ...Array<number>(6).fill(0.05),
+      ...ramp(0.05, 1, 80),
+      ...ramp(1, 0, 80),
+      ...Array<number>(120).fill(0),
+    ];
+    const { px, cal } = fromDepth(d, 120);
+    expect(segmentReps(px, cal)).toHaveLength(1);
+  });
+
   it('exposes the clip-level depthNorm signal', () => {
     const { px, cal } = fromDepth([0, 0.5, 1, null]);
     expect(depthNormSeries(px, cal)).toEqual([0, 0.5, 1, null]);

@@ -3,15 +3,19 @@
  * timestamps `t`, never from frame counts, so variable or unusual frame rates are handled.
  *
  * Within one rep, with hip-mid y in pixels and the rep's own depth
- *   p(i) = (y_i - standingHipY) / (y_bottom - standingHipY):
- *   - descent: `startFrame` -> first frame with p >= 1 - `nearBottomFrac` (within 3% of the
- *     bottom depth);
- *   - pause: the run of frames around `bottomFrame` whose |hip vertical velocity| is below
- *     `pauseVelFrac` of the rep's peak, clipped so it starts no earlier than the descent end.
- *     Empty (0 s) when the bottom frame itself is moving;
- *   - ascent: end of the pause -> `endFrame`.
- * The phases need not add up to the rep's duration: the slow approach between the 97% mark
- * and the first still frame belongs to none of them.
+ *   p(i) = (y_i - standingHipY) / (y_bottom - standingHipY),
+ * the bottom hold is the run of usable samples around the bottom (the lowest usable sample)
+ * that are both near the bottom (p >= 1 - `nearBottomFrac`, i.e. within 3%) and still
+ * (|hip vertical velocity| < `pauseVelFrac` of the rep's peak). It is empty when the bottom
+ * itself is moving (a bounce). Then
+ *   - descent: rep start -> start of the hold (or the bottom),
+ *   - pause: the hold,
+ *   - ascent: end of the hold -> rep end,
+ * so descent + pause + ascent always equals the rep's duration. When the lifter pauses, the
+ * descent ends where SPEC §5.7 puts it (first frame within 3% of the bottom depth); when they
+ * keep moving through the 3% band, that slow approach counts as descent rather than pause.
+ * Start, bottom and end use the nearest usable samples, so a single frame with an unusable
+ * hip does not drop the rep.
  *
  * Hip velocity is a central difference over the nearest usable frames at least
  * `velHalfWindowMs` away on each side (about one frame at 24-30 fps, three at 60 fps), which
@@ -25,7 +29,7 @@ import type { PxTrack } from '../smoothing';
 import type { Calibration, Confidence, Metric, Rep, TempoResult } from '../types';
 
 export const DEFAULTS = {
-  /** Descent ends at the first frame within this fraction of the bottom depth. */
+  /** The bottom hold only includes samples within this fraction of the bottom depth. */
   nearBottomFrac: 0.03,
   /** Pause = frames near the bottom with |hip velocity| below this fraction of the peak. */
   pauseVelFrac: 0.05,
@@ -84,50 +88,44 @@ export function tempo(
     ys.push(h.y);
     ts.push(frames[i]!.t);
   }
-  const iStart = idx.indexOf(rep.startFrame);
-  const iBottom = idx.indexOf(rep.bottomFrame);
-  const iEnd = idx.indexOf(rep.endFrame);
   const total = rep.endFrame - rep.startFrame + 1;
-  if (idx.length < o.minFrames || iStart < 0 || iBottom < 0 || iEnd < 0) {
+  if (idx.length < o.minFrames) {
     return { value: null, confidence: null, reason: 'insufficient_frames' };
   }
+  const iStart = 0;
+  const iEnd = idx.length - 1;
+  let iBottom = 0;
+  for (let k = 1; k < ys.length; k++) if (ys[k]! > ys[iBottom]!) iBottom = k;
   const durS = (ts[iEnd]! - ts[iStart]!) / 1000;
   const bottomDepth = ys[iBottom]! - calibration.standingHipY;
   if (!(durS > 0) || !(bottomDepth > 0)) {
     return { value: null, confidence: null, reason: 'insufficient_frames' };
   }
 
-  // Descent end: first sample within nearBottomFrac of the bottom depth.
-  const target = (1 - o.nearBottomFrac) * bottomDepth;
-  let iDescEnd = iBottom;
-  for (let k = iStart; k <= iBottom; k++) {
-    if (ys[k]! - calibration.standingHipY >= target) {
-      iDescEnd = k;
-      break;
-    }
-  }
-
-  // Hip vertical velocity, px/s.
-  const vel = ys.map((_, k) => {
-    let a = k;
-    while (a > 0 && ts[k]! - ts[a]! < o.velHalfWindowMs) a--;
-    let b = k;
+  // Hip vertical velocity, px/s: central difference between the nearest samples at least
+  // velHalfWindowMs away (clamped at the rep edges). Both pointers only move forward.
+  const vel: number[] = [];
+  let a = 0;
+  let b = 0;
+  for (let k = 0; k < ys.length; k++) {
+    while (a < k && ts[k]! - ts[a + 1]! >= o.velHalfWindowMs) a++;
+    b = Math.max(b, k);
     while (b < ys.length - 1 && ts[b]! - ts[k]! < o.velHalfWindowMs) b++;
-    return b > a ? ((ys[b]! - ys[a]!) / (ts[b]! - ts[a]!)) * 1000 : 0;
-  });
+    vel.push(b > a ? ((ys[b]! - ys[a]!) / (ts[b]! - ts[a]!)) * 1000 : 0);
+  }
   const peak = vel.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
-  const still = (k: number) => Math.abs(vel[k]!) < o.pauseVelFrac * peak;
+  const nearDepth = (1 - o.nearBottomFrac) * bottomDepth;
+  const held = (k: number) =>
+    Math.abs(vel[k]!) < o.pauseVelFrac * peak && ys[k]! - calibration.standingHipY >= nearDepth;
 
   let iPauseStart = iBottom;
   let iPauseEnd = iBottom;
-  if (still(iBottom)) {
-    while (iPauseStart > iStart && still(iPauseStart - 1)) iPauseStart--;
-    while (iPauseEnd < iEnd && still(iPauseEnd + 1)) iPauseEnd++;
+  if (held(iBottom)) {
+    while (iPauseStart > iStart && held(iPauseStart - 1)) iPauseStart--;
+    while (iPauseEnd < iEnd && held(iPauseEnd + 1)) iPauseEnd++;
   }
-  iPauseStart = Math.max(iPauseStart, iDescEnd);
-  iPauseEnd = Math.max(iPauseEnd, iPauseStart);
 
-  const descentS = (ts[iDescEnd]! - ts[iStart]!) / 1000;
+  const descentS = (ts[iPauseStart]! - ts[iStart]!) / 1000;
   const pauseS = (ts[iPauseEnd]! - ts[iPauseStart]!) / 1000;
   const ascentS = (ts[iEnd]! - ts[iPauseEnd]!) / 1000;
   const ascentHipVel = ascentS > 0 ? (ys[iPauseEnd]! - ys[iEnd]!) / ascentS / femur : 0;
@@ -145,16 +143,24 @@ const CONF_RANK: Record<Confidence, number> = { low: 0, medium: 1, high: 2 };
 
 /**
  * Set-level velocity loss `1 - v_last / v_first` from per-rep tempo, in rep order, where v is
- * `ascentHipVel` (hip speed, not bar speed). Uses the first and last reps that have a tempo
- * value. Null with `no_reps` for an empty set, `insufficient_frames` when fewer than two reps
- * have a usable tempo. Confidence is the lower of the two reps' confidences.
+ * `ascentHipVel` (hip speed, not bar speed). Strictly the set's first and last reps: if either
+ * has no tempo the result is null with that rep's reason, rather than silently comparing other
+ * reps. Null with `no_reps` for an empty set and `insufficient_frames` for a single rep or a
+ * non-positive first speed. Confidence is the lower of the two reps' confidences.
  */
 export function velocityLoss(tempos: ReadonlyArray<Metric<TempoResult>>): Metric<number> {
   if (tempos.length === 0) return { value: null, confidence: null, reason: 'no_reps' };
-  const timed = tempos.filter((m) => m.value !== null && m.value.ascentHipVel > 0);
-  if (timed.length < 2) return { value: null, confidence: null, reason: 'insufficient_frames' };
-  const first = timed[0]!;
-  const last = timed[timed.length - 1]!;
+  if (tempos.length < 2) return { value: null, confidence: null, reason: 'insufficient_frames' };
+  const first = tempos[0]!;
+  const last = tempos[tempos.length - 1]!;
+  for (const m of [first, last]) {
+    if (m.value === null) {
+      return { value: null, confidence: null, reason: m.reason ?? 'insufficient_frames' };
+    }
+  }
+  if (!(first.value!.ascentHipVel > 0)) {
+    return { value: null, confidence: null, reason: 'insufficient_frames' };
+  }
   const c1 = first.confidence ?? 'low';
   const c2 = last.confidence ?? 'low';
   return {

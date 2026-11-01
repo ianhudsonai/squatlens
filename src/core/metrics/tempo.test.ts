@@ -90,6 +90,30 @@ describe('tempo', () => {
     }
   });
 
+  it('splits the rep into descent + pause + ascent', () => {
+    const { reps, tempos } = run({ reps: 2, pauseS: 0.5, noise: 1 });
+    tempos.forEach((m, k) => {
+      const v = m.value!;
+      const dur = (reps[k]!.endT - reps[k]!.startT) / 1000;
+      expect(v.descentS + v.pauseS + v.ascentS).toBeCloseTo(dur, 9);
+    });
+  });
+
+  it('uses the nearest usable samples when a boundary frame has no hip', () => {
+    const px = preprocess(makeSquatTrack({ reps: 1 }));
+    const cal = calibrate(px)!;
+    const rep = segmentReps(px, cal)[0]!;
+    const ref = tempo(px, rep, cal).value!;
+    const frames = px.frames.map((f, i) =>
+      i === rep.bottomFrame || i === rep.startFrame
+        ? { ...f, pts: f.pts.map(() => null), usable: f.usable.map(() => false) }
+        : f,
+    );
+    const m = tempo({ ...px, frames }, rep, cal);
+    expect(m.value).not.toBeNull();
+    expect(Math.abs(m.value!.ascentHipVel - ref.ascentHipVel) / ref.ascentHipVel).toBeLessThan(0.1);
+  });
+
   it('is null without calibration', () => {
     const px = preprocess(makeSquatTrack({ reps: 1 }));
     const cal = calibrate(px)!;
@@ -151,7 +175,9 @@ describe('velocityLoss', () => {
     const nil: Metric<TempoResult> = { value: null, confidence: null, reason: 'low_visibility' };
     expect(velocityLoss([])).toEqual({ value: null, confidence: null, reason: 'no_reps' });
     expect(velocityLoss([t(1)]).reason).toBe('insufficient_frames');
-    expect(velocityLoss([t(1), nil]).reason).toBe('insufficient_frames');
+    // Strictly first vs last rep: a missing end rep gives its reason, not a shorter span.
+    expect(velocityLoss([t(1), nil])).toEqual(nil);
+    expect(velocityLoss([nil, t(1), t(0.8)])).toEqual(nil);
     expect(velocityLoss([t(1), nil, t(0.75, 'medium')])).toEqual({
       value: 0.25,
       confidence: 'medium',
