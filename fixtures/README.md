@@ -35,6 +35,7 @@ Record that agreement outside the repo; do not put names in file names, labels o
      counts those as "not measured").
    - `valgus_label`: `yes` if the knees visibly cave in, `no` if not, `na` if you cannot
      tell (always `na` for side views).
+
 6. Run `npm run eval`. It writes `eval/RESULTS.md` with agreement, confusion matrices and
    the reps worth a second look.
 
