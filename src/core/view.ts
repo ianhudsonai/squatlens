@@ -11,9 +11,8 @@
  * the spec's "lateral if yaw >= 60 or ratio2d < 0.25; frontal if yaw <= 25 or ratio2d >= 0.6":
  *   - both votes agree -> that view, confidence high;
  *   - only one signal available -> its vote, confidence medium;
- *   - votes differ -> confidence low; a lateral or frontal vote beats a diagonal one, and when
- *     one says lateral and the other frontal the 3D yaw wins (it does not depend on body
- *     proportions);
+ *   - votes differ -> confidence low; the view follows the spec's order: lateral if either
+ *     vote is lateral, else frontal if either is frontal;
  *   - no signal -> 'unknown'.
  *
  * Camera side (lateral only) = the side whose hip/knee/ankle have the higher mean visibility
@@ -23,7 +22,7 @@
  */
 import { dist } from './geometry';
 import type { Px } from './geometry';
-import { hipMid, shoulderMid } from './calibration';
+import { hipMid, median, shoulderMid, withDefaults } from './calibration';
 import { L_HIP, L_SHOULDER, R_HIP, R_SHOULDER, SIDE_JOINTS } from './landmarks';
 import type { PxTrack } from './smoothing';
 import type { Calibration, Confidence, Lm, Side, View, ViewResult } from './types';
@@ -56,13 +55,11 @@ export function metricsForView(view: View): Readonly<Record<MetricName, boolean>
 
 type Vote = Exclude<View, 'unknown'>;
 
-function median(xs: number[]): number | null {
-  if (xs.length === 0) return null;
-  const s = xs.slice().sort((a, b) => a - b);
-  const m = s.length >> 1;
-  return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
-}
-
+/**
+ * World landmarks are used even when the matching image landmark is not usable: MediaPipe
+ * always predicts all 33, and in side views the far shoulder/hip is routinely occluded, so
+ * gating on visibility would remove the yaw signal exactly where it matters.
+ */
 function finite(lm: Lm | undefined): lm is Lm {
   return !!lm && Number.isFinite(lm.x) && Number.isFinite(lm.z);
 }
@@ -104,10 +101,7 @@ export function detectView(
   calibration: Calibration | null,
   opts: Partial<ViewOptions> = {},
 ): ViewResult {
-  const o: ViewOptions = { ...DEFAULTS };
-  for (const [k, v] of Object.entries(opts)) {
-    if (v !== undefined && k in DEFAULTS) (o as Record<string, number>)[k] = v as number;
-  }
+  const o = withDefaults(DEFAULTS, opts);
 
   const idx =
     calibration && calibration.standingFrames.length > 0
@@ -156,20 +150,20 @@ export function detectView(
           ? 'frontal'
           : 'diagonal';
 
+  // SPEC order: lateral if either signal says lateral, else frontal if either says frontal.
   let view: View;
   let confidence: Confidence | null;
-  if (yawVote === null && ratioVote === null) {
+  const votes = [yawVote, ratioVote].filter((v): v is Vote => v !== null);
+  if (votes.length === 0) {
     view = 'unknown';
     confidence = null;
-  } else if (yawVote === null || ratioVote === null) {
-    view = (yawVote ?? ratioVote)!;
-    confidence = 'medium';
-  } else if (yawVote === ratioVote) {
-    view = yawVote;
-    confidence = 'high';
   } else {
-    view = yawVote === 'diagonal' ? ratioVote : yawVote;
-    confidence = 'low';
+    view = votes.includes('lateral')
+      ? 'lateral'
+      : votes.includes('frontal')
+        ? 'frontal'
+        : 'diagonal';
+    confidence = votes.length === 1 ? 'medium' : votes[0] === votes[1] ? 'high' : 'low';
   }
 
   return {

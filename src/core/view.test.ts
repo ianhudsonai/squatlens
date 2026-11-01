@@ -67,6 +67,13 @@ describe('detectView', () => {
     });
   });
 
+  it('lateral beats frontal when the two signals point opposite ways (SPEC order)', () => {
+    const px = preprocess(makeSquatTrack({ view: 'frontal' }));
+    // Force the 2D ratio to vote lateral while yaw (~0°) votes frontal.
+    const v = detectView(px, calibrate(px), { lateralMaxRatio: 0.9, frontalMinRatio: 0.95 });
+    expect(v).toMatchObject({ view: 'lateral', confidence: 'low' });
+  });
+
   it('finds the camera-facing side in lateral view', () => {
     expect(viewOf({ view: 'lateral', side: 'left' }).side).toBe('left');
     expect(viewOf({ view: 'lateral', side: 'right' }).side).toBe('right');

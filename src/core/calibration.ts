@@ -82,7 +82,7 @@ function percentile(xs: number[], p: number): number {
 }
 
 /** Spread that ignores keys explicitly set to undefined. */
-function withDefaults<T extends object>(defaults: T, opts: Partial<T>): T {
+export function withDefaults<T extends object>(defaults: T, opts: Partial<T>): T {
   const out = { ...defaults };
   for (const [k, v] of Object.entries(opts)) {
     if (v !== undefined) (out as Record<string, unknown>)[k] = v;
@@ -90,7 +90,8 @@ function withDefaults<T extends object>(defaults: T, opts: Partial<T>): T {
   return out;
 }
 
-function median(xs: number[]): number | null {
+/** Median of a list, or null when empty. */
+export function median(xs: number[]): number | null {
   if (xs.length === 0) return null;
   const s = xs.slice().sort((a, b) => a - b);
   const m = s.length >> 1;

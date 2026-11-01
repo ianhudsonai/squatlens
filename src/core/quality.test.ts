@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { makeSquatTrack } from '../../test/synthetic/makeSquatTrack';
 import type { SquatOptions } from '../../test/synthetic/makeSquatTrack';
 import { calibrate } from './calibration';
-import { L_ANKLE, L_HEEL, NOSE, R_ANKLE, R_HEEL } from './landmarks';
+import { L_ANKLE, L_HEEL, NOSE, R_ANKLE, R_HEEL, R_HIP, R_SHOULDER } from './landmarks';
 import { assessQuality } from './quality';
 import { preprocess } from './smoothing';
 import type { PoseTrack, ViewResult } from './types';
@@ -39,6 +39,17 @@ function pushOut(track: PoseTrack, idx: number[]): PoseTrack {
       ...f,
       lm:
         f.lm?.map((lm, k) => (idx.includes(k) ? { ...lm, y: 1.02, visibility: 0.9 } : lm)) ?? null,
+    })),
+  };
+}
+
+/** Marks the given landmarks as occluded (visibility 0.1) in every frame. */
+function hide(track: PoseTrack, idx: number[]): PoseTrack {
+  return {
+    ...track,
+    frames: track.frames.map((f) => ({
+      ...f,
+      lm: f.lm?.map((lm, k) => (idx.includes(k) ? { ...lm, visibility: 0.1 } : lm)) ?? null,
     })),
   };
 }
@@ -108,7 +119,7 @@ describe('assessQuality', () => {
   });
 
   it('flags cut-off feet', () => {
-    const { q } = run(shiftY(makeSquatTrack({ view: 'frontal' }), 0.15));
+    const { q } = run(shiftY(makeSquatTrack({ view: 'frontal' }), 0.2));
     expect(q.cutOff).toBe(true);
     expect(q.problems).toContain('cut_off');
     expect(q.ok).toBe(false);
@@ -123,6 +134,26 @@ describe('assessQuality', () => {
   it('flags feet that are outside the frame even with high visibility', () => {
     const track = pushOut(makeSquatTrack({ view: 'frontal' }), [L_ANKLE, L_HEEL]);
     expect(run(track).q.cutOff).toBe(true);
+  });
+
+  it('does not treat hidden heels as cut off when the ankles are visible', () => {
+    const track = hide(makeSquatTrack({ view: 'frontal' }), [L_HEEL, R_HEEL]);
+    expect(run(track).q.cutOff).toBe(false);
+  });
+
+  it('only needs the camera-side chain in lateral view (far hip/shoulder hidden)', () => {
+    const track = hide(makeSquatTrack({ view: 'lateral', side: 'left' }), [R_HIP, R_SHOULDER]);
+    const { q } = run(track, lateralView);
+    expect(q.visibleFrac).toBe(1);
+    expect(q.ok).toBe(true);
+  });
+
+  it('detects tilt from the camera-side trunk when the far side is hidden', () => {
+    const track = makeSquatTrack({ view: 'lateral', side: 'left', tiltDeg: 15 });
+    const px = preprocess(track);
+    const cal = calibrate(px); // calibrated on the full figure; tilt check on the hidden one
+    const hiddenPx = preprocess(hide(track, [R_HIP, R_SHOULDER]));
+    expect(assessQuality(hiddenPx, lateralView, cal).tiltedCamera).toBe(true);
   });
 
   it('flags a missing nose', () => {
@@ -140,7 +171,7 @@ describe('assessQuality', () => {
     const track = makeSquatTrack({ view: 'frontal' });
     const n = track.frames.length;
     const k = Math.floor(n * 0.1);
-    const brief = shiftY({ ...track, frames: track.frames.slice(0, k) }, 0.15);
+    const brief = shiftY({ ...track, frames: track.frames.slice(0, k) }, 0.2);
     const mixed = { ...track, frames: [...brief.frames, ...track.frames.slice(k)] };
     expect(run(mixed).q.cutOff).toBe(false);
   });

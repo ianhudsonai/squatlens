@@ -4,27 +4,32 @@
  *
  * - `visibleFrac`: fraction of all sampled frames in which every landmark the view needs is
  *   usable (after short-gap interpolation). Required landmarks:
- *     lateral  -> both hips (hip-mid drives reps) + camera-side shoulder, knee, ankle;
+ *     lateral  -> camera-side shoulder, hip, knee, ankle (the far side is often hidden);
  *     frontal  -> both hips, knees and ankles;
- *     diagonal / unknown -> both hips (tempo only).
+ *     diagonal / unknown -> at least one hip (tempo only).
  *   In lateral view with no known camera side, either side's chain satisfies the frame.
  * - `effectiveFps`: frames counted in `visibleFrac` / clip duration (s). The duration includes
  *   one median frame interval, so a fully visible clip sampled at N Hz scores N.
  * - `cutOff`: in more than `cutOffMaxFrac` of the frames that contain a pose, the nose or a
- *   foot (ankle or heel) is outside the image or not usable. A landmark outside the frame or
- *   with presence < 0.5 is never usable, so "not usable" is the closest proxy the pixel track
- *   offers; it also catches occlusion, which is reported as cut-off too. In lateral view only
- *   the camera-side foot is checked (the far foot is often hidden behind the near leg).
+ *   foot is outside the image or not usable. A foot counts as present when its ankle or its
+ *   heel is usable and inside the image, so a heel hidden behind the foot is not a cut-off.
+ *   A landmark outside the frame or with presence < 0.5 is never usable, so "not usable" is
+ *   the closest proxy the pixel track offers (heavy occlusion can still read as cut-off).
+ *   In lateral view only the camera-side foot is checked (the far foot hides behind the near
+ *   leg).
  * - `tiltedCamera`: median signed angle of hip-mid -> shoulder-mid vs the image vertical over
- *   the standing frames exceeds `maxStandingTrunkDeg`. People stand roughly upright, so a
- *   large standing lean means the camera is rolled. Does not block `ok`.
+ *   the standing frames exceeds `maxStandingTrunkDeg` (camera-side hip -> shoulder when a
+ *   far-side landmark is hidden). People stand roughly upright, so a large standing lean most
+ *   likely means the camera is rolled; a lifter leaning forward while standing can also trip
+ *   it, which is why it only warns. No standing frames -> false (squat frames would read the
+ *   squat's own trunk lean as tilt). Does not block `ok`.
  * - `ok = visibleFrac >= minVisibleFrac && effectiveFps >= minEffectiveFps && !cutOff &&
  *   pose found`. `diagonal_view` and `tilted_camera` are reported but do not block.
  *
  * Every threshold is an uncalibrated starting guess until validated on real clips (SPEC §10).
  */
 import { signedAngleToVerticalDeg } from './geometry';
-import { hipMid, shoulderMid } from './calibration';
+import { hipMid, median, shoulderMid, withDefaults } from './calibration';
 import { L_HIP, NOSE, R_HIP, SIDE_JOINTS } from './landmarks';
 import type { PxFrame, PxTrack } from './smoothing';
 import type { Calibration, QualityReport, Side, ViewResult } from './types';
@@ -46,39 +51,46 @@ type Problem = QualityReport['problems'][number];
 
 const SIDES: readonly Side[] = ['left', 'right'];
 
-function median(xs: number[]): number | null {
-  if (xs.length === 0) return null;
-  const s = xs.slice().sort((a, b) => a - b);
-  const m = s.length >> 1;
-  return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
-}
-
 /** True when landmark k is usable and inside the image. */
 function inFrame(f: PxFrame, k: number, width: number, height: number): boolean {
   const p = f.pts[k];
   return !!p && p.x >= 0 && p.x <= width && p.y >= 0 && p.y <= height;
 }
 
+/**
+ * Signed trunk angle vs vertical: hip-mid -> shoulder-mid, or the camera-side hip -> shoulder
+ * when a far-side landmark is hidden (common in lateral view).
+ */
+function trunkAngle(f: PxFrame, side: Side | null): number | null {
+  const h = hipMid(f);
+  const s = shoulderMid(f);
+  if (h && s) return signedAngleToVerticalDeg(h, s);
+  if (!side) return null;
+  const j = SIDE_JOINTS[side];
+  const hip = f.pts[j.hip];
+  const sh = f.pts[j.shoulder];
+  return hip && sh ? signedAngleToVerticalDeg(hip, sh) : null;
+}
+
 /** Predicate: does this frame have every landmark the view needs? */
 function requiredVisible(view: ViewResult): (f: PxFrame) => boolean {
-  const hips = (f: PxFrame) => f.usable[L_HIP]! && f.usable[R_HIP]!;
   const chain = (f: PxFrame, s: Side) => {
     const j = SIDE_JOINTS[s];
-    return f.usable[j.shoulder]! && f.usable[j.knee]! && f.usable[j.ankle]!;
+    return f.usable[j.shoulder]! && f.usable[j.hip]! && f.usable[j.knee]! && f.usable[j.ankle]!;
   };
   switch (view.view) {
     case 'lateral': {
       const side = view.side;
-      return side
-        ? (f) => hips(f) && chain(f, side)
-        : (f) => hips(f) && (chain(f, 'left') || chain(f, 'right'));
+      return side ? (f) => chain(f, side) : (f) => chain(f, 'left') || chain(f, 'right');
     }
     case 'frontal':
       return (f) =>
-        hips(f) &&
-        SIDES.every((s) => f.usable[SIDE_JOINTS[s].knee]! && f.usable[SIDE_JOINTS[s].ankle]!);
+        SIDES.every((s) => {
+          const j = SIDE_JOINTS[s];
+          return f.usable[j.hip]! && f.usable[j.knee]! && f.usable[j.ankle]!;
+        });
     default:
-      return hips;
+      return (f) => f.usable[L_HIP]! || f.usable[R_HIP]!;
   }
 }
 
@@ -89,10 +101,7 @@ export function assessQuality(
   calibration: Calibration | null,
   opts: Partial<QualityOptions> = {},
 ): QualityReport {
-  const o: QualityOptions = { ...DEFAULTS };
-  for (const [k, v] of Object.entries(opts)) {
-    if (v !== undefined && k in DEFAULTS) (o as Record<string, number>)[k] = v as number;
-  }
+  const o = withDefaults(DEFAULTS, opts);
   const { frames, width, height } = track;
   const n = frames.length;
 
@@ -115,9 +124,10 @@ export function assessQuality(
   const footSides: readonly Side[] = view.view === 'lateral' && view.side ? [view.side] : SIDES;
   const cutCount = poseFrames.reduce((c, f) => {
     const noseOut = !inFrame(f, NOSE, width, height);
+    // A foot is in frame when its ankle or its heel is; feet often hide one of the two.
     const footOut = footSides.some((s) => {
       const j = SIDE_JOINTS[s];
-      return !inFrame(f, j.ankle, width, height) || !inFrame(f, j.heel, width, height);
+      return !inFrame(f, j.ankle, width, height) && !inFrame(f, j.heel, width, height);
     });
     return c + (noseOut || footOut ? 1 : 0);
   }, 0);
@@ -127,9 +137,7 @@ export function assessQuality(
   for (const i of calibration?.standingFrames ?? []) {
     const f = frames[i];
     if (!f) continue;
-    const h = hipMid(f);
-    const s = shoulderMid(f);
-    const a = h && s ? signedAngleToVerticalDeg(h, s) : null;
+    const a = trunkAngle(f, view.view === 'lateral' ? view.side : null);
     if (a !== null) trunkAngles.push(a);
   }
   const standingTrunk = median(trunkAngles);
