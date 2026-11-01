@@ -12,7 +12,7 @@
  * - `valgus_label`: `yes` | `no` | `na` (`na` = could not judge, e.g. lateral view).
  * - `notes`: free text; quote it if it contains commas.
  *
- * Blank lines and lines starting with `#` are ignored.
+ * Blank lines and lines starting with `#` (comments; quotes in them are not parsed) are ignored.
  */
 
 export type DepthLabel = 'below' | 'parallel' | 'above';
@@ -46,7 +46,10 @@ const VIEWS: readonly string[] = ['lateral', 'frontal'];
 /** Safe as a file name: no path separators, no leading dot. */
 const CLIP_ID = /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/;
 
-/** Splits CSV text into records of fields (RFC 4180 quoting; CRLF or LF). */
+/**
+ * Splits CSV text into records of fields (RFC 4180 quoting; CRLF or LF). A line starting with
+ * `#` outside a quoted field is a comment and is skipped whole.
+ */
 export function parseCsv(text: string): Array<{ line: number; fields: string[] }> {
   const records: Array<{ line: number; fields: string[] }> = [];
   let fields: string[] = [];
@@ -79,6 +82,15 @@ export function parseCsv(text: string): Array<{ line: number; fields: string[] }
       i++;
       continue;
     }
+    if (c === '#' && field === '' && fields.length === 0) {
+      // Comment line: skip to its end without parsing quotes.
+      const nl = src.indexOf('\n', i);
+      if (nl < 0) break;
+      i = nl + 1;
+      line++;
+      recordLine = line;
+      continue;
+    }
     if (c === '"' && field === '') quoted = true;
     else if (c === ',') {
       fields.push(field);
@@ -104,7 +116,7 @@ export function parseCsv(text: string): Array<{ line: number; fields: string[] }
  */
 export function parseLabels(text: string): LabelRow[] {
   const records = parseCsv(text).filter(
-    (r) => !(r.fields.length === 1 && r.fields[0]!.trim() === '') && !r.fields[0]!.startsWith('#'),
+    (r) => !(r.fields.length === 1 && r.fields[0]!.trim() === ''),
   );
   const header = records.shift();
   const expected = LABELS_HEADER.join(',');
@@ -118,7 +130,7 @@ export function parseLabels(text: string): LabelRow[] {
   for (const { line, fields } of records) {
     const at = `labels.csv line ${line}`;
     if (fields.length < 5 || fields.length > 6) {
-      errors.push(`${at}: expected 6 columns, got ${fields.length}`);
+      errors.push(`${at}: expected 6 columns (notes may be omitted), got ${fields.length}`);
       continue;
     }
     const [clipId, view, repIndex, depth, valgus, notes = ''] = fields.map((f) => f.trim()) as [
@@ -142,7 +154,7 @@ export function parseLabels(text: string): LabelRow[] {
     if (!VALGUS.includes(valgus)) {
       errors.push(`${at}: valgus_label must be yes|no|na, got "${valgus}"`);
     }
-    const key = `${clipId}#${repIndex}`;
+    const key = `${clipId}#${idx}`;
     const prev = seen.get(key);
     if (prev !== undefined) errors.push(`${at}: duplicate of line ${prev} (${clipId} rep ${idx})`);
     else seen.set(key, line);

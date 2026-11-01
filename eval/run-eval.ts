@@ -8,8 +8,8 @@
  * Options: --labels <csv>, --fixtures <dir>, --out <md>. Paths are relative to the current
  * directory (the repo root under npm). With no labelled real clips yet it exits 0 and says so.
  */
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join, relative } from 'node:path';
 import { analyzeSet } from '../src/core';
 import type { AnalyzeOptions, PoseTrack } from '../src/core';
 import { parseLabels } from './labels';
@@ -81,7 +81,16 @@ export function fixtureLoader(dir: string): (clipId: string) => PoseTrack | null
   return (clipId) => {
     for (const name of [`${clipId}.json`, `${clipId}.pose.json`]) {
       const file = join(dir, name);
-      if (existsSync(file)) return asPoseTrack(JSON.parse(readFileSync(file, 'utf8')), file);
+      if (!existsSync(file)) continue;
+      let data: unknown;
+      try {
+        data = JSON.parse(readFileSync(file, 'utf8'));
+      } catch (err) {
+        throw new Error(`${file}: invalid JSON (${err instanceof Error ? err.message : err})`, {
+          cause: err,
+        });
+      }
+      return asPoseTrack(data, file);
     }
     return null;
   };
@@ -118,6 +127,7 @@ export function parseArgs(argv: readonly string[]): Args {
 }
 
 function write(out: string, md: string, summary: EvalSummary) {
+  mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, md);
   const d = summary.depth.agreement;
   const v = summary.valgus.agreement;

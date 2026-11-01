@@ -2,10 +2,13 @@
  * Scoring for the eval harness (SPEC §10): compares `analyzeSet` output with human labels.
  * Pure: no I/O, so it is unit-tested directly.
  *
- * - Reps are matched by index: label `rep_index` n (1-based) is `report.reps[n - 1]`. A label
- *   with no detected rep is a "missed rep"; detected reps with no label are counted per clip.
+ * - Reps are matched by index (SPEC §10): label `rep_index` n (1-based) is `report.reps[n - 1]`.
+ *   A label with no detected rep is a "missed rep". When a clip's detected rep count differs
+ *   from its highest labelled index, a missed or extra rep early on shifts every later match,
+ *   so the clip is marked `aligned: false` and the report says so; check it by hand.
  * - When `quality.ok` is false the app shows no metrics, so every rep of that clip counts as
- *   not measured (reason `quality_gate`) even if the core computed values.
+ *   not measured (reason `quality_gate`) even if the core computed values. A metric the view
+ *   never enables keeps reason `wrong_view`.
  * - Depth: the model has a 4th class, `borderline` (too close to call). Borderline reps are
  *   counted separately and excluded from agreement, as are reps with no value.
  * - Valgus: labels `na` are skipped; flagged = yes.
@@ -34,8 +37,11 @@ export interface ClipOutcome {
   detectedView: View;
   qualityOk: boolean;
   problems: string[];
+  /** Highest labelled `rep_index` (reps may be left unlabelled). */
   labelledReps: number;
   detectedReps: number;
+  /** labelledReps === detectedReps; when false, index matching may be shifted. */
+  aligned: boolean;
 }
 
 export interface Confusion<L extends string, P extends string> {
@@ -111,13 +117,18 @@ export function outcomesForClip(report: SetReport, labels: readonly LabelRow[]):
     const gated = !report.quality.ok;
     const d = rr.depth;
     const v = rr.valgus;
+    const reason = (m: { value: unknown; reason?: string }): Reason | null => {
+      if (m.reason === 'wrong_view') return 'wrong_view';
+      if (gated) return 'quality_gate';
+      return m.value ? null : (m.reason ?? 'unknown');
+    };
     return {
       label,
       depth: gated || !d.value ? 'not_measured' : d.value.cls,
       depthDelta: d.value ? d.value.delta : null,
-      depthReason: gated ? 'quality_gate' : d.value ? null : (d.reason ?? 'unknown'),
+      depthReason: reason(d),
       valgus: gated || !v.value ? 'not_measured' : v.value.flagged ? 'yes' : 'no',
-      valgusReason: gated ? 'quality_gate' : v.value ? null : (v.reason ?? 'unknown'),
+      valgusReason: reason(v),
     };
   });
 }
@@ -127,14 +138,16 @@ export function clipOutcome(
   report: SetReport,
   labels: readonly LabelRow[],
 ): ClipOutcome {
+  const labelledReps = Math.max(...labels.map((l) => l.repIndex));
   return {
     clipId,
     labelledView: labels[0]!.view,
     detectedView: report.view.view,
     qualityOk: report.quality.ok,
     problems: [...report.quality.problems],
-    labelledReps: labels.length,
+    labelledReps,
     detectedReps: report.reps.length,
+    aligned: labelledReps === report.reps.length,
   };
 }
 

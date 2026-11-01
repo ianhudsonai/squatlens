@@ -13,6 +13,7 @@
  * This checks that the pipeline and harness agree with geometry they were designed around;
  * it says nothing about accuracy on real people (that needs ian's labelled clips, #13).
  */
+import { DEPTH_DEFAULTS } from '../../src/core';
 import type { PoseTrack } from '../../src/core';
 import { makeSquatTrack, resolveOptions } from '../../test/synthetic/makeSquatTrack';
 import type { SquatOptions } from '../../test/synthetic/makeSquatTrack';
@@ -20,7 +21,7 @@ import type { DepthLabel, LabelRow, ValgusLabel } from '../labels';
 
 /** Knee cave (degrees) above which a synthetic rep is labelled valgus `yes`. */
 export const VALGUS_YES_DEG = 8;
-const PARALLEL_BAND = 0.05;
+const PARALLEL_BAND = DEPTH_DEFAULTS.parallelBand;
 
 export interface SyntheticClip {
   clipId: string;

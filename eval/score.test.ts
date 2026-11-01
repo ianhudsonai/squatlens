@@ -163,6 +163,12 @@ describe('outcomesForClip', () => {
     });
   });
 
+  it('keeps wrong_view (not quality_gate) for metrics the view never enables', () => {
+    const [o] = outcomesForClip(report([rep(0, null, null)], false), [label(1, 'below', 'no')]);
+    expect(o).toMatchObject({ depthReason: 'wrong_view', valgusReason: 'wrong_view' });
+    expect(reviewList([o!])).toEqual([]);
+  });
+
   it('carries the metric null reason', () => {
     const [o] = outcomesForClip(report([rep(0, 'lowvis', null)]), [label(1, 'above')]);
     expect(o).toMatchObject({ depth: 'not_measured', depthReason: 'low_visibility' });
@@ -225,6 +231,16 @@ describe('summarize', () => {
   it('scores view and rep count per clip', () => {
     expect(s.view).toEqual({ agree: 2, total: 2, rate: 1 });
     expect(s.repCount).toEqual({ agree: 1, total: 2, rate: 0.5 });
+    expect(s.clips.map((c) => c.aligned)).toEqual([false, true]);
+  });
+
+  it('counts reps up to the highest labelled index, even with gaps', () => {
+    const c = clipOutcome(
+      'g',
+      report([rep(0, null, null), rep(1, null, null), rep(2, null, null)]),
+      [label(1, 'below'), label(3, 'below')],
+    );
+    expect(c).toMatchObject({ labelledReps: 3, detectedReps: 3, aligned: true });
   });
 
   it('lists reps to review, leaving out expected wrong-view gaps', () => {

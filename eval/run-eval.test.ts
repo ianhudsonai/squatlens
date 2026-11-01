@@ -45,6 +45,7 @@ describe('synthetic set', () => {
     expect(md).toContain('# SquatLens validation results');
     expect(md).toContain('| **below** |');
     expect(md).toContain('## Reps to review');
+    expect(md).not.toContain('(differs)');
     // Deterministic output.
     const again = syntheticSet();
     const s2 = evaluate(again.labels, (id) => again.tracks.get(id) ?? null).summary;
@@ -85,6 +86,12 @@ describe('fixtures', () => {
     expect(load('one')?.frames.length).toBe(track.frames.length);
     expect(load('two')?.width).toBe(track.width);
     expect(load('three')).toBeNull();
+  });
+
+  it('names the file when a fixture is not valid JSON', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'squatlens-eval-'));
+    writeFileSync(join(dir, 'bad.json'), '{"version": 1, "fra');
+    expect(() => fixtureLoader(dir)('bad')).toThrow(/bad\.json: invalid JSON/);
   });
 
   it('rejects JSON that is not a PoseTrack', () => {

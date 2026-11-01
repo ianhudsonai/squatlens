@@ -20,6 +20,12 @@ describe('parseCsv', () => {
     ]);
   });
 
+  it('skips # comment lines without parsing quotes in them', () => {
+    expect(parseCsv('# note, "open quote\na,b\n# end').map((r) => [r.line, r.fields])).toEqual([
+      [2, ['a', 'b']],
+    ]);
+  });
+
   it('rejects an unterminated quote', () => {
     expect(() => parseCsv('a,"b\n')).toThrow(/unterminated/);
   });
@@ -86,7 +92,13 @@ describe('parseLabels', () => {
     expect(message).toContain('line 4: rep_index must be');
     expect(message).toContain('line 6: duplicate of line 5');
     expect(message).toContain('line 7: d is "frontal" here but "lateral" on line 5');
-    expect(message).toContain('line 8: expected 6 columns, got 3');
+    expect(message).toContain('line 8: expected 6 columns (notes may be omitted), got 3');
+  });
+
+  it('treats rep_index 1 and 01 as the same rep', () => {
+    expect(() => parseLabels(`${HEADER}\na,lateral,1,below,na,\na,lateral,01,above,na,\n`)).toThrow(
+      /duplicate of line 2/,
+    );
   });
 
   it('round-trips through formatLabels', () => {

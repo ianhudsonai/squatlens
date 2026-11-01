@@ -81,6 +81,14 @@ export function renderResults(s: EvalSummary, meta: ReportMeta): string {
   out.push(matrix(s.valgus.matrix));
 
   out.push('', '## Clips', '');
+  const misaligned = s.clips.filter((c) => !c.aligned).map((c) => `\`${c.clipId}\``);
+  if (misaligned.length > 0) {
+    out.push(
+      `Rep count differs on ${misaligned.join(', ')}: reps are matched by index, so a missed ` +
+        'or extra rep early in the clip shifts every later match. Check those clips by hand.',
+      '',
+    );
+  }
   out.push(
     table(
       ['clip', 'labelled view', 'detected view', 'quality', 'reps labelled', 'reps detected'],
@@ -90,7 +98,7 @@ export function renderResults(s: EvalSummary, meta: ReportMeta): string {
         c.detectedView,
         c.qualityOk ? 'ok' : `failed: ${c.problems.join(', ') || 'unknown'}`,
         String(c.labelledReps),
-        String(c.detectedReps),
+        c.aligned ? String(c.detectedReps) : `${c.detectedReps} (differs)`,
       ]),
     ),
   );
